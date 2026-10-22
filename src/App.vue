@@ -148,26 +148,28 @@ function onKey(e) {
   }
 }
 
-// 合成当前叠加效果(底图 + 光圈内透出的 hover 图)到原图分辨率画布。
+// object-fit:contain 实际绘制矩形(viewer 局部空间),合成与导出钉坐标共用
+function fitRectOf(img) {
+  const el = viewer.value;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const iw = img.naturalWidth * k;
+  const ih = img.naturalHeight * k;
+  return [(w - iw) / 2, (h - ih) / 2, iw, ih];
+}
+
+// 合成当前叠加效果(底图 + 光圈内透出的 hover 图 + 钉)到原图分辨率画布。
 // 方案 A:缩放/平移只是观察手段不参与合成,输出整张图;
 // 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
-// 未 hover 时即纯原图。图片未就绪返回 null。
+// 未 hover 且无钉时即纯原图。图片未就绪返回 null。
 function compositeCanvas() {
   const el = viewer.value;
   const imgA = el?.querySelector('.layer.front .ugrv-a');
   const imgB = el?.querySelector('.layer.front .ugrv-b');
   if (!imgA || !imgB || !imgA.naturalWidth || !imgB.naturalWidth)
     return null;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  // object-fit: contain 的实际绘制矩形(stage 局部空间)
-  const fitRect = (img) => {
-    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-    const iw = img.naturalWidth * k;
-    const ih = img.naturalHeight * k;
-    return [(w - iw) / 2, (h - ih) / 2, iw, ih];
-  };
-  const ra = fitRect(imgA);
+  const ra = fitRectOf(imgA);
   const fitK = imgA.naturalWidth / ra[2];
   const canvas = document.createElement('canvas');
   canvas.width = imgA.naturalWidth;
@@ -177,7 +179,7 @@ function compositeCanvas() {
   if (active.value || pins.value.length) {
     // hover 图画到临时画布;各透明区(钉住 + 当前光圈)先画到蒙版画布(source-over 叠加 = 并集),
     // 再一次 destination-in 抠出,叠回底图
-    const rb = fitRect(imgB);
+    const rb = fitRectOf(imgB);
     const temp = document.createElement('canvas');
     temp.width = canvas.width;
     temp.height = canvas.height;
@@ -239,12 +241,17 @@ async function downloadComposite() {
 async function exportHtml() {
   if (!pair.value)
     return;
+  // 钉转成原图分辨率坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
+  const imgA = viewer.value.querySelector('.layer.front .ugrv-a');
+  const ra = fitRectOf(imgA);
+  const fitK = imgA.naturalWidth / ra[2];
   await exportPlayer({
     urlA: pair.value.base,
     urlB: pair.value.hover,
     nameA: group.value?.baseName,
     nameB: group.value?.hoverNames?.[hIdx.value],
     name: (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '对比').replace(/\.\w+$/, ''),
+    pins: pins.value.map(p => ({ x: (p.x - ra[0]) * fitK, y: (p.y - ra[1]) * fitK, mode: p.mode, size: p.size * fitK })),
   });
 }
 
