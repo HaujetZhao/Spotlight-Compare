@@ -12,7 +12,7 @@ import { canvasStops, maskCSS } from './mask';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
-const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
+const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
 const viewer = ref(null);
 const stage = ref(null);
@@ -37,10 +37,15 @@ function onKey(e) {
     exportHtml();
     return;
   }
-  // 1-4 切模式,[ ] 和 , . 调光圈大小
+  // 1-4 切模式,[ ] 和 , . 调光圈大小,Tab 互换底图/产出
   const MODES = ['torch', 'brush', 'spotlight', 'lens'];
   if (e.key >= '1' && e.key <= '4') {
     settings.mode = MODES[e.key - 1];
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    swapPair();
     return;
   }
   if (e.key === '[' || e.key === ',')
@@ -177,10 +182,10 @@ onBeforeUnmount(() => {
       <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskCSS(settings.mode), maskImage: maskCSS(settings.mode) }">
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
+    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
   </div>
 
-  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @open-folder="openFolder" @grant-restore="grantRestore" />
+  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
 
   <SettingsPanel v-model="showSettings" />
 </template>

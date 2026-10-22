@@ -1,7 +1,7 @@
 <script setup>
 // 查看器角落工具栏:翻组/翻产出按钮 + 计数,换图/文件夹/设置入口
 defineProps({ count: Number, gIdx: Number, hIdx: Number, hoverCount: { type: Number, default: 0 } });
-defineEmits(['navGroup', 'navHover', 'pick', 'openFolder', 'toggleSettings']);
+defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'openFolder', 'toggleSettings']);
 </script>
 
 <template>
@@ -32,6 +32,9 @@ defineEmits(['navGroup', 'navHover', 'pick', 'openFolder', 'toggleSettings']);
     </button>
     <button @click="$emit('pick', 'hover')">
       换对比图
+    </button>
+    <button title="选一张左右拼接的单图,自动拆成两半对比" @click="$emit('pickStitched')">
+      拼接图
     </button>
     <button @click="$emit('toggleSettings')">
       设置

@@ -1,7 +1,7 @@
 <script setup>
 // 选择页:单选两图 / 打开文件夹批量配对 / 恢复上次文件夹
 defineProps({ pair: { type: Object, default: null }, needRestore: Boolean, noMatch: Boolean });
-defineEmits(['pick', 'openFolder', 'grantRestore']);
+defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
 </script>
 
 <template>
@@ -28,6 +28,9 @@ defineEmits(['pick', 'openFolder', 'grantRestore']);
       <button class="slot" @click="$emit('pick', 'hover')">
         <img v-if="pair && pair.hover" :src="pair.hover" alt="对比图预览">
         <span v-else>选择对比图</span>
+      </button>
+      <button class="slot" title="单张左右拼接的对比图,自动拆成两半" @click="$emit('pickStitched')">
+        <span>拼接图对比</span>
       </button>
     </div>
   </div>
@@ -65,7 +68,10 @@ defineEmits(['pick', 'openFolder', 'grantRestore']);
 }
 .slots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
+  padding: 0 16px;
 }
 .slot {
   width: 260px;

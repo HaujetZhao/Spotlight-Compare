@@ -88,6 +88,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <tr><td><kbd>拖拽</kbd></td><td class="act">平移</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
 <tr><td><kbd>双击</kbd></td><td class="act">复位</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">保存图片</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">光圈大小</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">复制图片</td></tr>
+<tr><td><kbd>Tab</kbd></td><td class="act">互换底图/对比图</td><td></td><td></td></tr>
 </table></div></div>
 </div>
 <script>
@@ -165,6 +166,7 @@ addEventListener('keydown',function(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='c'){e.preventDefault();copy();return}
   if(e.key==='?'){toggleHelp();return}
   if(e.key==='Escape'&&helpMask.classList.contains('ugrv-on')){toggleHelp();return}
+  if(e.key==='Tab'){e.preventDefault();var ai=el.querySelector('.ugrv-a'),t=ai.src;ai.src=bi.src;bi.src=t;return}
   if(e.key>='1'&&e.key<='4'){setMode(['torch','brush','spotlight','lens'][e.key-1]);return}
   if(e.key==='['||e.key===',')setSize(-10);
   if(e.key===']'||e.key==='.')setSize(10);

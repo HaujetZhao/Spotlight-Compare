@@ -109,6 +109,41 @@ export function useDirPairing() {
     }
   }
 
+  // ===== 拼接图:单张左右拼接图裁成两半,当作普通一对走全流程 =====
+  // 两半都裁成 floor(w/2) 宽保证 1:1 对应(奇数宽丢最右一列);PNG 编码无损
+  async function pickStitched() {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }],
+    });
+    const bmp = await createImageBitmap(await handle.getFile());
+    const half = Math.floor(bmp.width / 2);
+    const cut = async (sx) => {
+      const c = document.createElement('canvas');
+      c.width = half;
+      c.height = bmp.height;
+      c.getContext('2d').drawImage(bmp, sx, 0, half, bmp.height, 0, 0, half, bmp.height);
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      return URL.createObjectURL(blob);
+    };
+    const [left, right] = await Promise.all([cut(0), cut(half)]);
+    bmp.close();
+    groups.value.forEach(revokeGroup);
+    const stem = stemOf(handle.name);
+    groups.value = [{ base: left, hovers: [right], baseName: `${stem}(左).png`, hoverNames: [`${stem}(右).png`] }];
+    gIdx.value = 0;
+    hIdx.value = 0;
+  }
+
+  // 互换底图与当前产出(Tab):拼接图原图在右边时用
+  function swapPair() {
+    const g = group.value;
+    if (!g)
+      return;
+    const i = hIdx.value;
+    [g.base, g.hovers[i]] = [g.hovers[i], g.base];
+    [g.baseName, g.hoverNames[i]] = [g.hoverNames[i], g.baseName];
+  }
+
   async function scanDir(dir) {
     const names = [];
     for await (const [name, handle] of dir.entries()) {
@@ -185,5 +220,5 @@ export function useDirPairing() {
     groups.value.forEach(revokeGroup);
   }
 
-  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, openFolder, restore, grantRestore, navGroup, navHover, dispose };
+  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
 }
