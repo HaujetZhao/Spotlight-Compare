@@ -7,6 +7,14 @@ import { settings } from '../settings';
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
 const IMAGE_TYPES = [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }];
 const VIDEO_TYPES = [{ description: '视频', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.m4v'] } }];
+// 图片和视频合成一个筛选项:分成两条会在对话框里出现两个类别
+const MEDIA_TYPES = [{
+  description: '图片或视频',
+  accept: {
+    'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'],
+    'video/*': ['.mp4', '.webm', '.mov', '.m4v'],
+  },
+}];
 // 文件类型不一定有 MIME(有些系统只给空 type),再看扩展名
 const VIDEO_RE = /\.(?:mp4|webm|mov|m4v)$/i;
 const isVideo = (file, name) => file.type.startsWith('video/') || VIDEO_RE.test(name);
@@ -96,7 +104,7 @@ export function useDirPairing() {
   // 没有组时图/视频都能选,由选中的文件决定这对是什么;已有组则沿用组的类型
   async function pick(key) {
     const k = group.value?.kind;
-    const [handle] = await window.showOpenFilePicker({ types: k === 'video' ? VIDEO_TYPES : k === 'image' ? IMAGE_TYPES : [...IMAGE_TYPES, ...VIDEO_TYPES] });
+    const [handle] = await window.showOpenFilePicker({ types: k === 'video' ? VIDEO_TYPES : k === 'image' ? IMAGE_TYPES : MEDIA_TYPES });
     const file = await handle.getFile();
     const url = URL.createObjectURL(file);
     if (!group.value) {
@@ -128,7 +136,7 @@ export function useDirPairing() {
   // ===== 拼接图/拼接视频:一张左右拼接的图,或一段左右拼接的视频 =====
   // 图裁成两半;视频不拆不重编码,两槽共用同一个 objectURL,viewer 渲染时各裁半边
   async function pickStitched() {
-    const [handle] = await window.showOpenFilePicker({ types: [...IMAGE_TYPES, ...VIDEO_TYPES] });
+    const [handle] = await window.showOpenFilePicker({ types: MEDIA_TYPES });
     const file = await handle.getFile();
     const stem = stemOf(handle.name);
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
