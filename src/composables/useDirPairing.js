@@ -80,6 +80,10 @@ export function useDirPairing() {
       key: `${dirHandle.value?.name ?? ''}/${g.baseName}|${g.hoverNames[i] ?? g.hoverNames[0]}`,
       kind: g.kind ?? 'image',
       stitched: !!g.stitched,
+      // 视频对另带一份载入顺序的 srcs:Tab 互换只改角色(.ugrv-a/.ugrv-b 与静音),
+      // 不重设 src——视频元素换 src 会重载,卡一下
+      vids: g.vids,
+      swapped: !!g.vids && g.base !== g.vids[0],
     };
   });
   const needRestore = ref(false);
@@ -100,6 +104,8 @@ export function useDirPairing() {
         URL.revokeObjectURL(group.value.base);
       group.value.base = url;
       group.value.baseName = handle.name;
+      if (group.value.vids)
+        group.value.vids[0] = url;
     }
     else {
       const old = group.value.hovers[hIdx.value];
@@ -107,6 +113,8 @@ export function useDirPairing() {
         URL.revokeObjectURL(old);
       group.value.hovers[hIdx.value] = url;
       group.value.hoverNames[hIdx.value] = handle.name;
+      if (group.value.vids)
+        group.value.vids[1] = url;
     }
   }
 
@@ -130,7 +138,7 @@ export function useDirPairing() {
     const [a, b] = handles;
     const urls = await Promise.all([a.getFile(), b.getFile()].map(f => f.then(URL.createObjectURL)));
     groups.value.forEach(revokeGroup);
-    groups.value = [{ kind: 'video', base: urls[0], hovers: [urls[1]], baseName: a.name, hoverNames: [b.name] }];
+    groups.value = [{ kind: 'video', vids: urls, base: urls[0], hovers: [urls[1]], baseName: a.name, hoverNames: [b.name] }];
     gIdx.value = 0;
     hIdx.value = 0;
   }
@@ -144,7 +152,7 @@ export function useDirPairing() {
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
     const e = handle.name.slice(handle.name.lastIndexOf('.'));
     groups.value.forEach(revokeGroup);
-    groups.value = [{ kind: 'video', stitched: true, base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] }];
+    groups.value = [{ kind: 'video', stitched: true, vids: [url], base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] }];
     gIdx.value = 0;
     hIdx.value = 0;
   }

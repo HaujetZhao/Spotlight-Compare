@@ -49,10 +49,12 @@ function waitLoaded(v) {
     ? Promise.resolve()
     : new Promise(r => ['loadeddata', 'error'].forEach(t => v.addEventListener(t, r, { once: true })));
 }
-// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格
+// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格。
+// 底图按角色(.ugrv-a,含拼接视频包裹层)找,不能依赖 DOM 顺序:Tab 互换后顺序不变、角色会换
 function playAll() {
-  const [a, b] = frontVideos(); // DOM 顺序:底图在前
-  a?.play().then(() => b?.play()).catch(() => {});
+  const vs = frontVideos();
+  const base = vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
+  base?.play().then(() => vs.filter(v => v !== base).forEach(v => v.play())).catch(() => {});
 }
 function togglePlay() {
   const vs = frontVideos();
@@ -79,10 +81,17 @@ watch(pair, async (p, old) => {
     pinsKey = null;
     return;
   }
-  // Tab 互换 = 同一对视频换方向:进度和暂停状态延续,不从头播
-  const swap = old?.kind === 'video' && p.base === old.hover && p.hover === old.base;
-  const pos = swap ? (frontVideos()[0]?.currentTime ?? 0) : 0;
-  const wasPlaying = swap && frontVideos().some(v => !v.paused);
+  // Tab 互换视频对:src 一个没变,只是底图/对比图角色对调 —— 原地更新前层,
+  // 不重设 src、不翻层、不中断播放
+  if (p.kind === 'video' && old?.vids && p.vids?.length === old.vids.length && p.vids.every((u, i) => u === old.vids[i])) {
+    stages.value[cur.value] = p;
+    pinsKey = p.key;
+    const rec = await idbGet('pairs', p.key);
+    if (pair.value !== p)
+      return;
+    pins.value = rec?.pins ?? [];
+    return;
+  }
   if (p.kind === 'video') {
     // 视频没有离散的 decode:先挂上背层元素,等它们出第一帧再翻层
     stages.value[1 - cur.value] = p;
@@ -118,10 +127,7 @@ watch(pair, async (p, old) => {
   oldFront.forEach(v => v.pause()); // 旧前层退到背层:不暂停照样出声、吃解码
   if (p.kind === 'video') {
     await nextTick(); // cur 刚改,DOM 还没翻层,等刷完再取新的前层
-    const vs = frontVideos();
-    vs.forEach(v => v.currentTime = pos);
-    if (!swap || wasPlaying)
-      playAll();
+    playAll();
   }
 });
 function pin() {
@@ -409,10 +415,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </template>
+        <!-- 两路 src 固定按载入顺序,角色(.ugrv-a 底图出声 / .ugrv-b 静音)随 swapped 切换:Tab 互换不重载 -->
         <template v-else-if="s?.kind === 'video'">
-          <video class="ugrv-a" :src="s.base" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
-          <!-- 对比视频恒静音:只播底图声音 -->
-          <video class="ugrv-b" :src="s.hover" preload="auto" playsinline muted :style="i === cur ? maskStyle : undefined" @ended="onEnded" />
+          <video :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="!s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
         </template>
         <template v-else-if="s">
           <img class="ugrv-a" :src="s.base" alt="底图">
