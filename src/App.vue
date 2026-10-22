@@ -173,7 +173,7 @@ async function idbGet(key) {
   });
 }
 
-// ===== 翻页:←/→ 换组(原图),↑/↓ 换组内产出 =====
+// ===== 翻页:↑/↓ 换组(原图),←/→ 换组内产出 =====
 function navGroup(d) {
   if (groups.value.length < 2)
     return;
@@ -200,15 +200,15 @@ function onKey(e) {
     downloadComposite();
     return;
   }
-  // 只有一组时,←/→ 退化为切换组内产出
+  // 只有一组时,↑/↓ 退化为切换组内产出
   const single = groups.value.length < 2;
-  if (e.key === 'ArrowLeft')
-    single ? navHover(-1) : navGroup(-1);
-  if (e.key === 'ArrowRight')
-    single ? navHover(1) : navGroup(1);
   if (e.key === 'ArrowUp')
-    navHover(-1);
+    single ? navHover(-1) : navGroup(-1);
   if (e.key === 'ArrowDown')
+    single ? navHover(1) : navGroup(1);
+  if (e.key === 'ArrowLeft')
+    navHover(-1);
+  if (e.key === 'ArrowRight')
     navHover(1);
 }
 
