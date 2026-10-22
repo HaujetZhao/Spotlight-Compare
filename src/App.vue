@@ -19,18 +19,19 @@ const stage = ref(null);
 const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
 
 // 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚。
-// 钉按"一对图"方向性各存一份:Tab 互换是新的一对(钉从空开始),换回原方向时原来的钉回来
+// 钉按 pair.key(目录/底图名|产出名,方向性)各存一份:Tab 互换是新的一对,换回原方向时原来的钉回来;
+// 钉表落 localStorage,文件夹恢复后钉跟着恢复
 const pins = ref([]);
-const pinsByPair = new Map();
+const pinsByPair = new Map(JSON.parse(localStorage.getItem('ugrv-pins') || '[]'));
+watch(pins, () => localStorage.setItem('ugrv-pins', JSON.stringify([...pinsByPair])), { deep: true });
 watch(pair, (p) => {
   if (!p) {
     pins.value = [];
     return;
   }
-  const key = `${p.base}|${p.hover}`;
-  if (!pinsByPair.has(key))
-    pinsByPair.set(key, []);
-  pins.value = pinsByPair.get(key);
+  if (!pinsByPair.has(p.key))
+    pinsByPair.set(p.key, []);
+  pins.value = pinsByPair.get(p.key);
 });
 function pin() {
   if (!active.value)

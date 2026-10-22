@@ -88,16 +88,22 @@ export function useDirPairing() {
   const gIdx = ref(0);
   const hIdx = ref(0);
   const group = computed(() => groups.value[gIdx.value]);
-  // 当前对:产出取组内第 hIdx 张(默认第一张)
+  // 当前对:产出取组内第 hIdx 张(默认第一张);key 是方向性稳定标识(目录/底图名|产出名),
+  // objectURL 刷新即失效,光圈钉等按对绑定的状态用它存取
+  const dirHandle = ref(null);
   const pair = computed(() => {
     const g = group.value;
     if (!g)
       return null;
-    return { base: g.base, hover: g.hovers[hIdx.value] ?? g.hovers[0] };
+    const i = hIdx.value;
+    return {
+      base: g.base,
+      hover: g.hovers[i] ?? g.hovers[0],
+      key: `${dirHandle.value?.name ?? ''}/${g.baseName}|${g.hoverNames[i] ?? g.hoverNames[0]}`,
+    };
   });
   const needRestore = ref(false);
   const noMatch = ref(false);
-  const dirHandle = ref(null);
 
   // ===== 单独换图:替换当前组的原图 / 当前选中那张产出 =====
   async function pick(key) {
