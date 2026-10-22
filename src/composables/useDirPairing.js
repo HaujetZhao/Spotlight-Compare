@@ -92,8 +92,10 @@ export function useDirPairing() {
       kind: g.kind ?? 'image',
       stitched: !!g.stitched,
       // 视频对另带一份载入顺序的 srcs:Tab 互换只改角色(.ugrv-a/.ugrv-b 与静音),
-      // 不重设 src——视频元素换 src 会重载,卡一下。拼接视频两半同源,靠 flipped 决定谁露左半
-      vids: g.vids,
+      // 不重设 src——视频元素换 src 会重载,卡一下。拼接视频两半同源,靠 flipped 决定谁露左半。
+      // 这里必须是快照:直接引用 g.vids 的话,换图后旧 pair 的 vids 也跟着变,
+      // watch 里"同一组 src 不变 = Tab 互换"的判断就会误判
+      vids: g.vids && [...g.vids],
       swapped: !!g.vids && (g.stitched ? !!g.flipped : g.base !== g.vids[0]),
     };
   });

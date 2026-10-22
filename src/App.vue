@@ -54,12 +54,21 @@ function waitLoaded(v) {
 function playAll() {
   const vs = frontVideos();
   const base = vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
-  // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve),拼接视频两半就不同帧
-  const started = base?.play();
+  if (!base)
+    return;
+  // 起播前把对比路对齐到底图的时间戳(暂停后恢复、拼接视频两半不能各走各的)
+  vs.forEach((v) => {
+    if (v !== base)
+      v.currentTime = base.currentTime;
+  });
+  // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve)
+  const started = base.play();
   vs.filter(v => v !== base).forEach(v => v.play().catch(() => {}));
   started?.catch(() => vs.forEach(v => v.pause()));
 }
 function togglePlay() {
+  if (!pair.value?.base || !pair.value?.hover)
+    return; // 还没选齐两路,不播
   const vs = frontVideos();
   if (vs.some(v => !v.paused))
     vs.forEach(v => v.pause());
@@ -128,7 +137,8 @@ watch(pair, async (p, old) => {
   const oldFront = frontVideos();
   cur.value = 1 - cur.value; // 翻层:新图 + 新 mask 同帧生效
   oldFront.forEach(v => v.pause()); // 旧前层退到背层:不暂停照样出声、吃解码
-  if (p.kind === 'video') {
+  // 两路选齐才自动播:只选了底图时停在第一帧,等用户选对比
+  if (p.kind === 'video' && p.base && p.hover) {
     await nextTick(); // cur 刚改,DOM 还没翻层,等刷完再取新的前层
     playAll();
   }
@@ -419,8 +429,8 @@ onBeforeUnmount(() => {
         </template>
         <!-- 两路 src 固定按载入顺序,角色(.ugrv-a 底图出声 / .ugrv-b 静音)随 swapped 切换:Tab 互换不重载 -->
         <template v-else-if="s?.kind === 'video'">
-          <video :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
-          <video :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="!s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[0]" :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[1]" :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="!s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
         </template>
         <template v-else-if="s">
           <img class="ugrv-a" :src="s.base" alt="底图">
