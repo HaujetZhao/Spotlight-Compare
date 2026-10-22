@@ -425,9 +425,23 @@ async function downloadComposite() {
 }
 
 // Ctrl+E:当前一对图导出为内嵌 base64 的单文件 HTML。
-// 缩水版效果页:只保留光圈跟随 + 滚轮调光圈大小,不带缩放平移/模式切换/设置面板。
+// 缩水版效果页:光圈跟随 + 滚轮缩放(以鼠标为中心) + 拖拽平移 + Ctrl+滚轮调光圈 + 双击复位,
+// 不带模式切换/设置面板。transform-origin 固定 0 0,光圈坐标按 (屏幕-平移)/缩放 折算回局部空间。
+// 内嵌图片先按面板格式/质量重编码压缩(JPEG 无 alpha,垫白底),再转 dataURL
 async function toDataURL(url) {
-  const blob = await (await fetch(url)).blob();
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (settings.exportFormat === 'jpeg') {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(img, 0, 0);
+  const blob = await new Promise(r => canvas.toBlob(r, `image/${settings.exportFormat}`, settings.exportQuality));
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result);
@@ -462,7 +476,8 @@ async function exportHtml() {
 <style>
 @property --ugrv-r{syntax:"<length>";inherits:true;initial-value:0px}
 body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
-.ugrv{position:relative;width:100vw;height:100dvh;overflow:hidden;user-select:none;cursor:${cursor};--ugrv-size:${settings.size}px}
+.ugrv{position:relative;width:100vw;height:100dvh;overflow:hidden;user-select:none;cursor:${cursor};--ugrv-size:${settings.size}px;touch-action:none}
+.stage{position:absolute;inset:0;transform-origin:0 0}
 .ugrv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
 .ugrv-a{z-index:1}
 .ugrv-b{z-index:2;-webkit-mask-image:${mask};mask-image:${mask};-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
@@ -471,20 +486,29 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 </style>
 </head>
 <body>
-<div class="ugrv"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
+<div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div></div>
 <script>
 (function(){
-var el=document.querySelector('.ugrv'),x=0,y=0,q=false,size=${settings.size};
+var el=document.querySelector('.ugrv'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0;
 function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px')}
-function move(e){var r=el.getBoundingClientRect();x=e.clientX-r.left;y=e.clientY-r.top;if(!q){q=true;requestAnimationFrame(apply)}}
+function applyT(){el.querySelector('.stage').style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')'}
+function move(e){var r=el.getBoundingClientRect();x=(e.clientX-r.left-tx)/s;y=(e.clientY-r.top-ty)/s;if(!q){q=true;requestAnimationFrame(apply)}}
 function show(e){move(e);el.classList.add('ugrv-in')}
 function hide(){el.classList.remove('ugrv-in')}
-el.addEventListener('pointermove',move);
 el.addEventListener('pointerenter',show);
-el.addEventListener('pointerdown',show);
-el.addEventListener('pointerleave',hide);
-el.addEventListener('pointercancel',hide);
-addEventListener('wheel',function(e){size=Math.max(50,Math.min(400,size-e.deltaY*0.1));el.style.setProperty('--ugrv-size',size+'px')},{passive:true});
+el.addEventListener('pointerleave',function(){if(!pan)hide()});
+el.addEventListener('pointerdown',function(e){if(e.button!==0)return;pan=true;px=e.clientX-tx;py=e.clientY-ty;show(e)});
+el.addEventListener('pointermove',function(e){if(pan){tx=e.clientX-px;ty=e.clientY-py;applyT()}move(e)});
+addEventListener('pointerup',function(){if(!pan)return;pan=false;if(matchMedia('(hover:none)').matches)hide()});
+el.addEventListener('dblclick',function(){s=1;tx=0;ty=0;applyT()});
+el.addEventListener('dragstart',function(e){e.preventDefault()});
+el.addEventListener('wheel',function(e){
+  e.preventDefault();
+  if(e.ctrlKey||pan){size=Math.max(50,Math.min(400,size-e.deltaY*0.1));el.style.setProperty('--ugrv-size',size+'px');return}
+  var r=el.getBoundingClientRect(),k=e.deltaY>0?1/1.1:1.1,ns=Math.min(10,Math.max(0.1,s*k)),f=ns/s;
+  var cx=e.clientX-r.left,cy=e.clientY-r.top;
+  tx=cx-(cx-tx)*f;ty=cy-(cy-ty)*f;s=ns;applyT();move(e);
+});
 })();
 </${'script'}>
 </body>
@@ -526,7 +550,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick">
+  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick" @dragstart.prevent>
     <div ref="stage" class="stage">
       <img class="ugrv-a" :src="pair.base" alt="底图">
       <img class="ugrv-b" :src="pair.hover" alt="对比图">
