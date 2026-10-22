@@ -3,8 +3,8 @@
 // 圈内透出 hover 图。支持文件夹批対:按"原图标记"(前缀/后缀)配对,←/→ 翻对。
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import SettingsPanel from './SettingsPanel.vue';
 import { settings } from './settings';
+import SettingsPanel from './SettingsPanel.vue';
 
 const groups = ref([]); // [{ base, hovers: [url] }]
 const gIdx = ref(0);
@@ -13,11 +13,10 @@ const group = computed(() => groups.value[gIdx.value]);
 // 当前对:产出取组内第 hIdx 张(默认第一张)
 const pair = computed(() => {
   const g = group.value;
-  if (!g) return null;
+  if (!g)
+    return null;
   return { base: g.base, hover: g.hovers[hIdx.value] ?? g.hovers[0] };
 });
-const pairs = computed(() => groups.value.map(g => ({ base: g.base, hover: g.hovers[0] })));
-const current = computed(() => gIdx.value);
 const showSettings = ref(false);
 const needRestore = ref(false);
 const noMatch = ref(false);
@@ -42,11 +41,14 @@ async function pick(key) {
     hIdx.value = 0;
   }
   if (key === 'base') {
-    if (group.value.base) URL.revokeObjectURL(group.value.base);
+    if (group.value.base)
+      URL.revokeObjectURL(group.value.base);
     group.value.base = url;
-  } else {
+  }
+  else {
     const old = group.value.hovers[hIdx.value];
-    if (old) URL.revokeObjectURL(old);
+    if (old)
+      URL.revokeObjectURL(old);
     group.value.hovers[hIdx.value] = url;
   }
 }
@@ -67,14 +69,17 @@ function pairUp(names) {
   const byRoot = new Map();
   for (const name of names) {
     const stem = stemOf(name);
-    if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase())) continue;
+    if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
+      continue;
     const marked = settings.matchMode === 'prefix' ? stem.startsWith(m) : stem.endsWith(m);
     const root = marked
       ? (settings.matchMode === 'prefix' ? stem.slice(m.length) : stem.slice(0, -m.length))
       : stem;
-    if (!root) continue;
+    if (!root)
+      continue;
     const slot = byRoot.get(root) || { baseName: '', hoverNames: [] };
-    if (marked) slot.baseName = name;
+    if (marked)
+      slot.baseName = name;
     else slot.hoverNames.push(name);
     byRoot.set(root, slot);
   }
@@ -84,7 +89,8 @@ function pairUp(names) {
 async function scanDir(dir) {
   const names = [];
   for await (const [name, handle] of dir.entries()) {
-    if (handle.kind === 'file') names.push(name);
+    if (handle.kind === 'file')
+      names.push(name);
   }
   const list = [];
   for (const { baseName, hoverNames } of pairUp(names)) {
@@ -111,7 +117,8 @@ async function openFolder() {
 // 刷新后恢复:目录句柄已授权则直接扫描,否则等用户点"恢复"
 async function restore() {
   const dir = await idbGet('dir');
-  if (!dir) return;
+  if (!dir)
+    return;
   dirHandle.value = dir;
   if (await dir.queryPermission({ mode: 'read' }) !== 'granted') {
     needRestore.value = true;
@@ -121,16 +128,18 @@ async function restore() {
 }
 async function grantRestore() {
   const dir = dirHandle.value;
-  if (dir && await dir.requestPermission({ mode: 'read' }) === 'granted') await scanDir(dir);
+  if (dir && await dir.requestPermission({ mode: 'read' }) === 'granted')
+    await scanDir(dir);
   needRestore.value = false;
 }
 
 // 标记设置变了自动重扫(输入防抖)
 let rescanTimer = null;
 watch(() => [settings.matchMode, settings.matchStr], () => {
-  if (!dirHandle.value) return;
+  if (!dirHandle.value)
+    return;
   clearTimeout(rescanTimer);
-  rescanTimer = setTimeout(() => scanDir(dirHandle.value), 300);
+  rescanTimer = setTimeout(scanDir, 300, dirHandle.value);
 });
 
 // --- 最小 IndexedDB 存取(只存目录句柄) ---
@@ -162,24 +171,31 @@ async function idbGet(key) {
 
 // ===== 翻页:←/→ 换组(原图),↑/↓ 换组内产出 =====
 function navGroup(d) {
-  if (groups.value.length < 2) return;
+  if (groups.value.length < 2)
+    return;
   gIdx.value = (gIdx.value + d + groups.value.length) % groups.value.length;
   hIdx.value = 0; // 切组重置到第一张产出
 }
 function navHover(d) {
   const n = group.value?.hovers.length ?? 0;
-  if (n < 2) return;
+  if (n < 2)
+    return;
   hIdx.value = (hIdx.value + d + n) % n;
 }
 function onKey(e) {
   const tag = document.activeElement?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA')
+    return;
   // 只有一组时,←/→ 退化为切换组内产出
   const single = groups.value.length < 2;
-  if (e.key === 'ArrowLeft') single ? navHover(-1) : navGroup(-1);
-  if (e.key === 'ArrowRight') single ? navHover(1) : navGroup(1);
-  if (e.key === 'ArrowUp') navHover(-1);
-  if (e.key === 'ArrowDown') navHover(1);
+  if (e.key === 'ArrowLeft')
+    single ? navHover(-1) : navGroup(-1);
+  if (e.key === 'ArrowRight')
+    single ? navHover(1) : navGroup(1);
+  if (e.key === 'ArrowUp')
+    navHover(-1);
+  if (e.key === 'ArrowDown')
+    navHover(1);
 }
 
 // ===== 光圈/缩放/平移 =====
@@ -197,7 +213,8 @@ const stage = ref(null);
 
 function applyTransform() {
   const el = stage.value;
-  if (!el) return;
+  if (!el)
+    return;
   el.style.scale = scale.value;
   el.style.translate = `${pointX.value}px ${pointY.value}px`;
 }
@@ -220,7 +237,8 @@ function apply(e) {
   y.value = p.y;
 }
 function move(e) {
-  if (queued) return;
+  if (queued)
+    return;
   queued = true;
   requestAnimationFrame(() => apply(e));
 }
@@ -233,14 +251,16 @@ function hide() {
 }
 function onUp() {
   // 触屏:抬手即收起光圈
-  if (window.matchMedia('(hover:none)').matches) hide();
+  if (window.matchMedia('(hover:none)').matches)
+    hide();
 }
 
 function onWheel(e) {
   e.preventDefault();
   const ratio = 1 + (e.deltaY > 0 ? -1 : 1) * ZOOM_STEP;
   const newScale = scale.value * ratio;
-  if (newScale < MIN_SCALE || newScale > MAX_SCALE) return;
+  if (newScale < MIN_SCALE || newScale > MAX_SCALE)
+    return;
   const r = stage.value.getBoundingClientRect();
   // 以鼠标为中心:先把该点平移补偿回来再缩放
   pointX.value -= (e.clientX - r.left - r.width / 2) * (ratio - 1);
@@ -254,8 +274,10 @@ let panning = false;
 let panStartX = 0;
 let panStartY = 0;
 function onDown(e) {
-  if (e.button !== 0) return;
-  if (e.target.closest('button')) return;
+  if (e.button !== 0)
+    return;
+  if (e.target.closest('button'))
+    return;
   e.preventDefault();
   panning = true;
   panStartX = e.clientX - pointX.value;
@@ -263,14 +285,17 @@ function onDown(e) {
   viewer.value.style.cursor = 'grabbing';
 }
 function onPanMove(e) {
-  if (!panning) return;
-  if (Math.hypot(e.clientX - (panStartX + pointX.value), e.clientY - (panStartY + pointY.value)) < 5) return;
+  if (!panning)
+    return;
+  if (Math.hypot(e.clientX - (panStartX + pointX.value), e.clientY - (panStartY + pointY.value)) < 5)
+    return;
   pointX.value = e.clientX - panStartX;
   pointY.value = e.clientY - panStartY;
   applyTransform();
 }
 function onPanUp() {
-  if (!panning) return;
+  if (!panning)
+    return;
   panning = false;
   viewer.value.style.cursor = '';
 }
@@ -285,7 +310,8 @@ function onDblClick() {
 // 位置/大小要按当前 scale/translate 换算回屏幕坐标(toLocal 的逆运算)
 const ringStyle = computed(() => {
   const el = viewer.value;
-  if (!el) return {};
+  if (!el)
+    return {};
   const w = el.clientWidth;
   const h = el.clientHeight;
   const cx = w / 2 + pointX.value + (x.value - w / 2) * scale.value;
@@ -309,46 +335,68 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="pair" ref="viewer" class="ugrv" :class="['ugrv-m-' + settings.mode, { 'ugrv-in': active }]" :style="{ '--ugrv-x': x + 'px', '--ugrv-y': y + 'px', '--ugrv-size': settings.size + 'px', '--ugrv-soft': settings.softness + '%' }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick">
+  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick">
     <div ref="stage" class="stage">
-      <img class="ugrv-a" :src="pair.base" alt="底图" />
-      <img class="ugrv-b" :src="pair.hover" alt="对比图" />
+      <img class="ugrv-a" :src="pair.base" alt="底图">
+      <img class="ugrv-b" :src="pair.hover" alt="对比图">
     </div>
     <span class="ugrv-lab ugrv-lab-a">底图</span>
     <span class="ugrv-lab ugrv-lab-b">对比图</span>
     <div class="ugrv-ring" :style="ringStyle" />
     <div class="toolbar">
-      <button v-if="groups.length > 1" @click.stop="navGroup(-1)">‹</button>
+      <button v-if="groups.length > 1" @click.stop="navGroup(-1)">
+        ‹
+      </button>
       <span v-if="groups.length > 1" class="counter">{{ gIdx + 1 }}/{{ groups.length }}</span>
-      <button v-if="groups.length > 1" @click.stop="navGroup(1)">›</button>
+      <button v-if="groups.length > 1" @click.stop="navGroup(1)">
+        ›
+      </button>
       <template v-if="group && group.hovers.length > 1">
-        <button @click.stop="navHover(-1)">▲</button>
+        <button @click.stop="navHover(-1)">
+          ▲
+        </button>
         <span class="counter">{{ hIdx + 1 }}/{{ group.hovers.length }}</span>
-        <button @click.stop="navHover(1)">▼</button>
+        <button @click.stop="navHover(1)">
+          ▼
+        </button>
       </template>
-      <button @click.stop="openFolder">文件夹</button>
-      <button @click.stop="pick('base')">换底图</button>
-      <button @click.stop="pick('hover')">换对比图</button>
-      <button @click.stop="showSettings = !showSettings">设置</button>
+      <button @click.stop="openFolder">
+        文件夹
+      </button>
+      <button @click.stop="pick('base')">
+        换底图
+      </button>
+      <button @click.stop="pick('hover')">
+        换对比图
+      </button>
+      <button @click.stop="showSettings = !showSettings">
+        设置
+      </button>
     </div>
   </div>
 
   <div v-else class="picker">
     <h1>图片对比查看</h1>
     <p>选两张图,鼠标悬停处用手电筒光圈透出对比图。</p>
-    <p class="hint">或打开文件夹批量对比:原图带标记(默认后缀 "_原"),不带标记的自动作为它的 hover 图。</p>
-    <button v-if="needRestore" class="restore" @click="grantRestore">恢复上次的文件夹</button>
-    <p v-if="noMatch" class="warn">这个文件夹里没有配到对:确认设置里的"原图标记"与文件名前缀一致(默认 原-),且每张原图至少有一张不带标记的产出。</p>
+    <p class="hint">
+      或打开文件夹批量对比:原图带标记(默认后缀 "_原"),不带标记的自动作为它的 hover 图。
+    </p>
+    <button v-if="needRestore" class="restore" @click="grantRestore">
+      恢复上次的文件夹
+    </button>
+    <p v-if="noMatch" class="warn">
+      这个文件夹里没有配到对:确认设置里的"原图标记"与文件名前缀一致(默认 原-),且每张原图至少有一张不带标记的产出。
+    </p>
     <div class="slots">
       <button class="slot" @click="pick('base')">
-        <img v-if="pair && pair.base" :src="pair.base" alt="底图预览" />
+        <img v-if="pair && pair.base" :src="pair.base" alt="底图预览">
         <span v-else>选择底图</span>
       </button>
       <button class="slot big" @click="openFolder">
         <span>打开文件夹</span>
       </button>
       <button class="slot" @click="pick('hover')">
-        <img v-if="pair && pair.hover" :src="pair.hover" alt="对比图预览" />
+        <img v-if="pair && pair.hover" :src="pair.hover" alt="对比图预览">
         <span v-else>选择对比图</span>
       </button>
     </div>

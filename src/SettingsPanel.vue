@@ -21,7 +21,8 @@ const top = ref(80);
 // 拖拽(仅标题栏)
 let dragOffset = null;
 function onDragStart(e) {
-  if (!e.target.closest('.panel-header')) return;
+  if (!e.target.closest('.panel-header'))
+    return;
   e.preventDefault();
   const rect = panelEl.value.getBoundingClientRect();
   dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -29,7 +30,8 @@ function onDragStart(e) {
   document.addEventListener('mouseup', onDragEnd);
 }
 function onDragMove(e) {
-  if (!dragOffset) return;
+  if (!dragOffset)
+    return;
   left.value = Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - panelEl.value.offsetWidth));
   top.value = Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - panelEl.value.offsetHeight));
 }
@@ -41,16 +43,19 @@ function onDragEnd() {
 
 // Esc / 点外关闭
 function onKey(e) {
-  if (e.key === 'Escape') emit('update:modelValue', false);
+  if (e.key === 'Escape')
+    emit('update:modelValue', false);
 }
 function onDocDown(e) {
-  if (!panelEl.value.contains(e.target)) emit('update:modelValue', false);
+  if (!panelEl.value.contains(e.target))
+    emit('update:modelValue', false);
 }
 watch(() => props.modelValue, (open) => {
   if (open) {
     window.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDocDown);
-  } else {
+  }
+  else {
     window.removeEventListener('keydown', onKey);
     document.removeEventListener('mousedown', onDocDown);
   }
@@ -66,11 +71,13 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div v-if="modelValue" ref="panelEl" class="panel" :style="{ left: `${left}px`, top: `${top}px` }" @mousedown="onDragStart">
-      <div class="panel-header">预览设置</div>
+      <div class="panel-header">
+        预览设置
+      </div>
       <div class="panel-body">
         <div class="item">
           <label>光圈大小</label>
-          <input v-model.number="settings.size" type="range" min="50" max="400" step="10" />
+          <input v-model.number="settings.size" type="range" min="50" max="400" step="10">
           <span>{{ settings.size }}px</span>
         </div>
         <div class="item">
@@ -89,7 +96,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="item">
           <label>边缘柔和</label>
-          <input v-model.number="settings.softness" type="range" min="30" max="85" step="1" :disabled="settings.mode === 'spotlight' || settings.mode === 'lens'" />
+          <input v-model.number="settings.softness" type="range" min="30" max="85" step="1" :disabled="settings.mode === 'spotlight' || settings.mode === 'lens'">
           <span>{{ settings.softness }}%</span>
         </div>
 
@@ -98,13 +105,17 @@ onBeforeUnmount(() => {
         <div class="item">
           <label>标记位置</label>
           <div class="seg-group">
-            <button class="seg-btn" :class="{ active: settings.matchMode === 'prefix' }" @click="settings.matchMode = 'prefix'">前缀</button>
-            <button class="seg-btn" :class="{ active: settings.matchMode === 'suffix' }" @click="settings.matchMode = 'suffix'">后缀</button>
+            <button class="seg-btn" :class="{ active: settings.matchMode === 'prefix' }" @click="settings.matchMode = 'prefix'">
+              前缀
+            </button>
+            <button class="seg-btn" :class="{ active: settings.matchMode === 'suffix' }" @click="settings.matchMode = 'suffix'">
+              后缀
+            </button>
           </div>
         </div>
         <div class="item">
           <label>原图标记</label>
-          <input v-model="settings.matchStr" class="text-input" type="text" placeholder="如 _原" />
+          <input v-model="settings.matchStr" class="text-input" type="text" placeholder="如 _原">
         </div>
       </div>
     </div>
