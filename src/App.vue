@@ -257,8 +257,8 @@ function onUp() {
 
 function onWheel(e) {
   e.preventDefault();
-  if (e.ctrlKey) {
-    // Ctrl+滚轮:调光圈大小(替代浏览器页面缩放)
+  if (e.ctrlKey || panning) {
+    // Ctrl+滚轮 / 左键按住时滚轮:调光圈大小(替代浏览器页面缩放)
     settings.size = Math.max(50, Math.min(400, settings.size + (e.deltaY > 0 ? -10 : 10)));
     return;
   }
