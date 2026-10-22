@@ -13,6 +13,7 @@ import { canvasStops, maskCSS, pinCSS } from './mask';
 import { mediaSize } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
+import { startRecording } from './videoRecord';
 
 const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
@@ -127,10 +128,16 @@ function togglePlay() {
     playAll();
   }
 }
-// 任一播完:两路归零重播
+// 录制状态放最前:onEnded/onKey 运行时就会引用(函数声明会提升,状态声明不会)
+const recording = ref(null); // { pct },null = 没在录
+let recorder = null;
+
+// 任一播完:录制中则收工保存;否则两路归零重播
 function onEnded(e) {
   if (!e.target.closest('.layer')?.classList.contains('front'))
     return;
+  if (recorder)
+    return finishRecording(true);
   frontVideos().forEach((v) => {
     v.pause();
     v.currentTime = 0;
@@ -263,6 +270,17 @@ function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA')
     return;
+  // 录制中只认空格(停下保存)和 Esc(取消),其余一律忽略:翻组/换声/放钉都会毁掉录制
+  if (recording.value) {
+    if (e.key === ' ') {
+      e.preventDefault();
+      finishRecording(true);
+    }
+    else if (e.key === 'Escape') {
+      finishRecording(false);
+    }
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
     e.preventDefault();
     copyComposite();
@@ -270,7 +288,10 @@ function onKey(e) {
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
     e.preventDefault();
-    downloadComposite();
+    if (pair.value?.kind === 'video')
+      recordVideo();
+    else
+      downloadComposite();
     return;
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
@@ -356,8 +377,9 @@ function drawMedia(ctx, el, dx, dy, dw, dh) {
 // 合成当前叠加效果(底图 + 光圈内透出的 hover 图 + 钉)到原图分辨率画布。
 // 方案 A:缩放/平移只是观察手段不参与合成,输出整张图;
 // 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
-// 未 hover 且无钉时即纯原图。图片未就绪返回 null。
-function compositeCanvas() {
+// 未 hover 且无钉时即纯原图。zones 为 stage 局部坐标光圈;媒体未就绪返回 null。
+// 截帧(Ctrl+C/S)与视频录制共用。
+function compositeInto(canvas, zones) {
   const el = viewer.value;
   const mediaA = el?.querySelector('.layer.front .ugrv-a');
   const mediaB = el?.querySelector('.layer.front .ugrv-b');
@@ -367,13 +389,12 @@ function compositeCanvas() {
     return null;
   const ra = fitRectOf(mediaA);
   const fitK = sa.w / ra[2];
-  const canvas = document.createElement('canvas');
   canvas.width = sa.w;
   canvas.height = sa.h;
   const ctx = canvas.getContext('2d');
   drawMedia(ctx, mediaA, 0, 0, sa.w, sa.h);
-  if (active.value || pins.value.length) {
-    // hover 图画到临时画布;各透明区(钉住 + 当前光圈)先画到蒙版画布(source-over 叠加 = 并集),
+  if (zones.length) {
+    // hover 图画到临时画布;各透明区先画到蒙版画布(source-over 叠加 = 并集),
     // 再一次 destination-in 抠出,叠回底图
     const rb = fitRectOf(mediaB);
     const temp = document.createElement('canvas');
@@ -385,10 +406,6 @@ function compositeCanvas() {
     mask.width = canvas.width;
     mask.height = canvas.height;
     const mc = mask.getContext('2d');
-    const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
-    // 镜头模式出图时屏上不显实时光圈,合成同样不画
-    if (active.value && (settings.mode !== 'lens' || onImg.value))
-      zones.push({ x: x.value, y: y.value, size: settings.size, stops: canvasStops(settings.mode, settings.softness) });
     for (const z of zones) {
       const mx = (z.x - ra[0]) * fitK;
       const my = (z.y - ra[1]) * fitK;
@@ -402,6 +419,14 @@ function compositeCanvas() {
     ctx.drawImage(temp, 0, 0);
   }
   return canvas;
+}
+
+function compositeCanvas() {
+  const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
+  // 镜头模式出图时屏上不显实时光圈,合成同样不画
+  if (active.value && (settings.mode !== 'lens' || onImg.value))
+    zones.push({ x: x.value, y: y.value, size: settings.size, stops: canvasStops(settings.mode, settings.softness) });
+  return compositeInto(document.createElement('canvas'), zones);
 }
 
 // Ctrl+C:合成结果写入剪贴板(PNG,浏览器剪贴板只保证这一种)
@@ -430,6 +455,53 @@ async function downloadComposite() {
   a.href = URL.createObjectURL(blob);
   const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
   a.download = `${name}.${fmt}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// Ctrl+S(视频对):实时录制合成视频——两路从头同播,钉住的光圈冻成静态 mask 烧进画面,
+// 出声那路带进音轨;播完或空格停下即保存,Esc 取消。录制中其余快捷键一律忽略。
+function recordVideo() {
+  if (recorder || !pair.value?.base || !pair.value?.hover)
+    return;
+  const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
+  const canvas = document.createElement('canvas');
+  if (!compositeInto(canvas, zones))
+    return; // 先画一帧:定下画布尺寸、确认媒体就绪
+  recorder = startRecording(canvas, frontVideos().find(v => !v.muted));
+  syncSlaves();
+  frontVideos().forEach((v) => {
+    v.currentTime = 0;
+  });
+  playAll();
+  recording.value = { pct: 0 };
+  const dur = frontVideos()[0].duration;
+  const draw = () => {
+    if (!recorder)
+      return;
+    const vs = frontVideos();
+    if (vs.every(v => v.paused))
+      return finishRecording(true); // 空格暂停即停录保存
+    compositeInto(canvas, zones);
+    recording.value.pct = Math.min(1, vs[0].currentTime / dur);
+    requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+}
+async function finishRecording(save) {
+  const r = recorder;
+  recorder = null;
+  recording.value = null;
+  if (!r)
+    return;
+  frontVideos().forEach(v => v.pause());
+  if (!save)
+    return;
+  const blob = await r.stop();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
+  a.download = `${name}-合成.${r.ext}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -505,6 +577,9 @@ onBeforeUnmount(() => {
     <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
       ?
     </button>
+    <div v-if="recording" class="ugrv-rec">
+      录制中 {{ Math.round(recording.pct * 100) }}% · 空格停止并保存 · Esc 取消
+    </div>
     <div v-if="showHelp" class="ugrv-help-mask" @click="showHelp = false">
       <div class="ugrv-card">
         <h3>快捷键</h3>
@@ -588,7 +663,7 @@ onBeforeUnmount(() => {
               复制图片
             </td>
             <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">
-              保存图片
+              保存图片 / 录制合成视频
             </td>
           </tr>
           <tr>
@@ -748,6 +823,20 @@ body {
 }
 .ugrv-help:hover {
   background: rgba(52, 64, 100, 0.9);
+}
+/* 录制中进度条 */
+.ugrv-rec {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(178, 44, 44, 0.88);
+  color: #fff;
+  font: 600 13px system-ui, sans-serif;
+  user-select: none;
 }
 .ugrv-help-mask {
   position: absolute;
