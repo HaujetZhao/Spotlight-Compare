@@ -20,6 +20,7 @@ const pairs = computed(() => groups.value.map(g => ({ base: g.base, hover: g.hov
 const current = computed(() => gIdx.value);
 const showSettings = ref(false);
 const needRestore = ref(false);
+const noMatch = ref(false);
 const viewer = ref(null);
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
@@ -96,6 +97,7 @@ async function scanDir(dir) {
   groups.value = list;
   gIdx.value = 0;
   hIdx.value = 0;
+  noMatch.value = list.length === 0;
 }
 
 async function openFolder() {
@@ -334,6 +336,7 @@ onBeforeUnmount(() => {
     <p>选两张图,鼠标悬停处用手电筒光圈透出对比图。</p>
     <p class="hint">或打开文件夹批量对比:原图带标记(默认后缀 "_原"),不带标记的自动作为它的 hover 图。</p>
     <button v-if="needRestore" class="restore" @click="grantRestore">恢复上次的文件夹</button>
+    <p v-if="noMatch" class="warn">这个文件夹里没有配到对:确认设置里的"原图标记"与文件名前缀一致(默认 原-),且每张原图至少有一张不带标记的产出。</p>
     <div class="slots">
       <button class="slot" @click="pick('base')">
         <img v-if="pair && pair.base" :src="pair.base" alt="底图预览" />
@@ -505,6 +508,13 @@ body {
 .picker .hint {
   font-size: 13px;
   opacity: 0.5;
+}
+.picker .warn {
+  margin: 0;
+  max-width: 560px;
+  font-size: 13px;
+  color: #ffb84d;
+  text-align: center;
 }
 .slots {
   display: flex;
