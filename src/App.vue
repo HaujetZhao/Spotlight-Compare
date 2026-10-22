@@ -2,13 +2,13 @@
 // 手电筒对比:底图铺满,hover 图在上层用 radial-gradient 圆形遮罩跟随指针(延迟 0),
 // 圈内透出 hover 图。支持文件夹批対:按"原图标记"(前缀/后缀)配对,←/→ 翻对。
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PickerPage from './components/PickerPage.vue';
 import Toolbar from './components/Toolbar.vue';
 import { useDirPairing } from './composables/useDirPairing';
 import { usePanZoom } from './composables/usePanZoom';
 import { exportPlayer } from './exportPlayer';
-import { canvasStops, maskCSS } from './mask';
+import { canvasStops, maskCSS, pinCSS } from './mask';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
@@ -17,6 +17,37 @@ const showSettings = ref(false);
 const viewer = ref(null);
 const stage = ref(null);
 const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
+
+// 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚;换图即清
+const pins = ref([]);
+watch(pair, () => (pins.value = []));
+function pin() {
+  if (!active.value)
+    return;
+  pins.value.push({ x: x.value, y: y.value, mode: settings.mode, size: settings.size, softness: settings.softness });
+}
+// 左键抬起时位移 < 5px 且按压时长 < 300ms 才算点击放钉,拖拽/长按不放
+let downPos = null;
+function onViewDown(e) {
+  if (e.button === 0)
+    downPos = { x: e.clientX, y: e.clientY, t: performance.now() };
+  onDown(e);
+}
+function onViewUp(e) {
+  onUp(e);
+  if (e.button !== 0 || e.pointerType !== 'mouse' || !downPos)
+    return;
+  if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) < 5 && performance.now() - downPos.t < 300)
+    pin();
+  downPos = null;
+}
+function unpin() {
+  const hit = pins.value.findIndex(p => Math.hypot(p.x - x.value, p.y - y.value) <= p.size);
+  if (hit >= 0)
+    pins.value.splice(hit, 1);
+}
+// ugrv-b 的 mask:钉住层 + 实时层,逗号并列成多层(union)
+const maskValue = computed(() => [...pins.value.map(pinCSS), maskCSS(settings.mode)].join(', '));
 
 function onKey(e) {
   const tag = document.activeElement?.tagName;
@@ -98,21 +129,32 @@ function compositeCanvas() {
   canvas.height = imgA.naturalHeight;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(imgA, 0, 0);
-  if (active.value) {
-    // hover 图画到临时画布,用径向渐变 destination-in 抠出光圈,再叠回
+  if (active.value || pins.value.length) {
+    // hover 图画到临时画布;各透明区(钉住 + 当前光圈)先画到蒙版画布(source-over 叠加 = 并集),
+    // 再一次 destination-in 抠出,叠回底图
     const rb = fitRect(imgB);
     const temp = document.createElement('canvas');
     temp.width = canvas.width;
     temp.height = canvas.height;
     const t = temp.getContext('2d');
     t.drawImage(imgB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
+    const mask = document.createElement('canvas');
+    mask.width = canvas.width;
+    mask.height = canvas.height;
+    const mc = mask.getContext('2d');
+    const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
+    if (active.value)
+      zones.push({ x: x.value, y: y.value, size: settings.size, stops: canvasStops(settings.mode, settings.softness) });
+    for (const z of zones) {
+      const mx = (z.x - ra[0]) * fitK;
+      const my = (z.y - ra[1]) * fitK;
+      const g = mc.createRadialGradient(mx, my, 0, mx, my, z.size * fitK);
+      z.stops.forEach(([o, c]) => g.addColorStop(o, c));
+      mc.fillStyle = g;
+      mc.fillRect(0, 0, mask.width, mask.height);
+    }
     t.globalCompositeOperation = 'destination-in';
-    const mx = (x.value - ra[0]) * fitK;
-    const my = (y.value - ra[1]) * fitK;
-    const g = t.createRadialGradient(mx, my, 0, mx, my, settings.size * fitK);
-    canvasStops(settings.mode, settings.softness).forEach(([o, c]) => g.addColorStop(o, c));
-    t.fillStyle = g;
-    t.fillRect(0, 0, canvas.width, canvas.height);
+    t.drawImage(mask, 0, 0);
     ctx.drawImage(temp, 0, 0);
   }
   return canvas;
@@ -176,10 +218,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick" @dragstart.prevent>
+  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @dblclick="onDblClick" @contextmenu.prevent="unpin" @dragstart.prevent>
     <div ref="stage" class="stage">
       <img class="ugrv-a" :src="pair.base" alt="底图">
-      <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskCSS(settings.mode), maskImage: maskCSS(settings.mode) }">
+      <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskValue, maskImage: maskValue }">
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
     <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />

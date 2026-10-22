@@ -17,3 +17,9 @@ export function maskCSS(mode, soft = 'var(--ugrv-soft)') {
   const body = STOPS[mode].map(([o, c]) => `${c} ${o === 'soft' ? soft : `${Math.round(o * 100)}%`}`).join(', ');
   return `radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), ${body})`;
 }
+
+// CSS 遮罩串(钉住区):圆心/大小/柔和度直接烙进串,与实时层逗号并列成多层 mask(默认 union 叠加)
+export function pinCSS(pin) {
+  const body = STOPS[pin.mode].map(([o, c]) => `${c} ${o === 'soft' ? `${pin.softness}%` : `${Math.round(o * 100)}%`}`).join(', ');
+  return `radial-gradient(circle ${pin.size}px at ${pin.x}px ${pin.y}px, ${body})`;
+}
