@@ -3,6 +3,8 @@
 // 圈内透出 hover 图。支持文件夹批対:按"原图标记"(前缀/后缀)配对,←/→ 翻对。
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import PickerPage from './components/PickerPage.vue';
+import Toolbar from './components/Toolbar.vue';
 import { useDirPairing } from './composables/useDirPairing';
 import { usePanZoom } from './composables/usePanZoom';
 import { exportPlayer } from './exportPlayer';
@@ -175,64 +177,10 @@ onBeforeUnmount(() => {
       <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskCSS(settings.mode), maskImage: maskCSS(settings.mode) }">
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <div class="toolbar">
-      <button v-if="groups.length > 1" @click.stop="navGroup(-1)">
-        ‹
-      </button>
-      <span v-if="groups.length > 1" class="counter">{{ gIdx + 1 }}/{{ groups.length }}</span>
-      <button v-if="groups.length > 1" @click.stop="navGroup(1)">
-        ›
-      </button>
-      <template v-if="group && group.hovers.length > 1">
-        <button @click.stop="navHover(-1)">
-          ▲
-        </button>
-        <span class="counter">{{ hIdx + 1 }}/{{ group.hovers.length }}</span>
-        <button @click.stop="navHover(1)">
-          ▼
-        </button>
-      </template>
-      <button @click.stop="openFolder">
-        文件夹
-      </button>
-      <button @click.stop="pick('base')">
-        换底图
-      </button>
-      <button @click.stop="pick('hover')">
-        换对比图
-      </button>
-      <button @click.stop="showSettings = !showSettings">
-        设置
-      </button>
-    </div>
+    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
   </div>
 
-  <div v-else class="picker">
-    <h1>图片对比查看</h1>
-    <p>选两张图,鼠标悬停处用手电筒光圈透出对比图。</p>
-    <p class="hint">
-      或打开文件夹批量对比:原图带标记(默认后缀 "_原"),不带标记的自动作为它的 hover 图。
-    </p>
-    <button v-if="needRestore" class="restore" @click="grantRestore">
-      恢复上次的文件夹
-    </button>
-    <p v-if="noMatch" class="warn">
-      这个文件夹里没有配到对:确认设置里的"原图标记"与文件名前缀一致(默认 原-),且每张原图至少有一张不带标记的产出。
-    </p>
-    <div class="slots">
-      <button class="slot" @click="pick('base')">
-        <img v-if="pair && pair.base" :src="pair.base" alt="底图预览">
-        <span v-else>选择底图</span>
-      </button>
-      <button class="slot big" @click="openFolder">
-        <span>打开文件夹</span>
-      </button>
-      <button class="slot" @click="pick('hover')">
-        <img v-if="pair && pair.hover" :src="pair.hover" alt="对比图预览">
-        <span v-else>选择对比图</span>
-      </button>
-    </div>
-  </div>
+  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @open-folder="openFolder" @grant-restore="grantRestore" />
 
   <SettingsPanel v-model="showSettings" />
 </template>
@@ -323,102 +271,5 @@ body {
   .ugrv {
     transition: none;
   }
-}
-
-/* 选择页 */
-.picker {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  min-height: 100dvh;
-  color: #fff;
-  font-family: system-ui, sans-serif;
-}
-.picker h1 {
-  margin: 0;
-  font-size: 24px;
-}
-.picker p {
-  margin: 0;
-  opacity: 0.7;
-}
-.picker .hint {
-  font-size: 13px;
-  opacity: 0.5;
-}
-.picker .warn {
-  margin: 0;
-  max-width: 560px;
-  font-size: 13px;
-  color: #ffb84d;
-  text-align: center;
-}
-.slots {
-  display: flex;
-  gap: 24px;
-}
-.slot {
-  width: 260px;
-  height: 180px;
-  border: 2px dashed rgba(255, 255, 255, 0.35);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: inherit;
-  font: 600 15px system-ui, sans-serif;
-  cursor: pointer;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.slot.big {
-  border-color: rgba(74, 108, 247, 0.7);
-  color: #9db1ff;
-}
-.slot:hover {
-  border-color: rgba(255, 255, 255, 0.7);
-}
-.slot img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.restore {
-  padding: 8px 20px;
-  border: none;
-  border-radius: 999px;
-  background: #4a6cf7;
-  color: #fff;
-  font: 600 14px system-ui, sans-serif;
-  cursor: pointer;
-}
-
-/* 查看器角落的工具栏 */
-.toolbar {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 4;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.toolbar button {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.42);
-  color: #fff;
-  font: 600 12px system-ui, sans-serif;
-  cursor: pointer;
-}
-.toolbar .counter {
-  padding: 6px 4px;
-  color: #fff;
-  font: 700 12px system-ui, sans-serif;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 </style>
