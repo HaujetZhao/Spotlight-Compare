@@ -257,6 +257,11 @@ function onUp() {
 
 function onWheel(e) {
   e.preventDefault();
+  if (e.ctrlKey) {
+    // Ctrl+滚轮:调光圈大小(替代浏览器页面缩放)
+    settings.size = Math.max(50, Math.min(400, settings.size + (e.deltaY > 0 ? -10 : 10)));
+    return;
+  }
   const ratio = 1 + (e.deltaY > 0 ? -1 : 1) * ZOOM_STEP;
   const newScale = scale.value * ratio;
   if (newScale < MIN_SCALE || newScale > MAX_SCALE)
