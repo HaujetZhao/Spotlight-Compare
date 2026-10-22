@@ -95,14 +95,19 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 </div>
 <script>
 (function(){
-var el=document.querySelector('.ugrv'),ai=el.querySelector('.ugrv-a'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality};
+var el=document.querySelector('.ugrv'),ai=el.querySelector('.ugrv-a'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality},onImg=true;
 var stops=${stops};
 function css(st){return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y),'+st.map(function(p){return p[1]+' '+Math.round(p[0]*100)+'%'}).join(',')+')'}
 var ring=el.querySelector('.ugrv-ring');
-function ringVis(){var on=mode==='lens';ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}
+function ringVis(){var on=mode==='lens'&&onImg;ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}
 function applyRing(){var r=size*s*0.78;ring.style.left=(tx+x*s-r)+'px';ring.style.top=(ty+y*s-r)+'px';ring.style.width=ring.style.height=r*2+'px'}
 function setMode(m){mode=m;var g=css(stops[m]);bi.style.webkitMaskImage=g;bi.style.maskImage=g;el.style.cursor=m==='lens'?'none':'crosshair';ringVis()}
-function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');applyRing()}
+function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');
+  var w=el.clientWidth,h=el.clientHeight,k=Math.min(w/ai.naturalWidth,h/ai.naturalHeight),iw=ai.naturalWidth*k,ih=ai.naturalHeight*k;
+  onImg=Math.abs(x-w/2)<=iw/2&&Math.abs(y-h/2)<=ih/2;
+  if(mode==='lens'){el.style.cursor=onImg?'none':'crosshair';bi.style.visibility=onImg?'visible':'hidden'}
+  applyRing();ringVis();
+}
 function applyT(){el.querySelector('.stage').style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';applyRing()}
 function move(e){var r=el.getBoundingClientRect();x=(e.clientX-r.left-tx)/s;y=(e.clientY-r.top-ty)/s;if(!q){q=true;requestAnimationFrame(apply)}}
 function show(e){move(e);el.classList.add('ugrv-in');ringVis()}

@@ -16,7 +16,7 @@ const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitche
 const showSettings = ref(false);
 const viewer = ref(null);
 const stage = ref(null);
-const { x, y, active, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
+const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
 
 function onKey(e) {
   const tag = document.activeElement?.tagName;
@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick" @dragstart.prevent>
+  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick" @dragstart.prevent>
     <div ref="stage" class="stage">
       <img class="ugrv-a" :src="pair.base" alt="底图">
       <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskCSS(settings.mode), maskImage: maskCSS(settings.mode) }">
@@ -251,9 +251,12 @@ body {
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
 }
-/* 放大镜:藏光标,用可见圆环代替 */
-.ugrv-m-lens {
+/* 放大镜:在底图内藏光标用圆环代替,出图恢复鼠标并藏光圈遮罩 */
+.ugrv-m-lens.ugrv-on-img {
   cursor: none;
+}
+.ugrv-m-lens:not(.ugrv-on-img) .ugrv-b {
+  visibility: hidden;
 }
 .ugrv-ring {
   position: absolute;
@@ -264,7 +267,7 @@ body {
   pointer-events: none;
   opacity: 0;
 }
-.ugrv-m-lens.ugrv-in .ugrv-ring {
+.ugrv-m-lens.ugrv-on-img.ugrv-in .ugrv-ring {
   opacity: 1;
 }
 @media (hover: none) {

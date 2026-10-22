@@ -12,6 +12,8 @@ export function usePanZoom(stage, viewer) {
   const x = ref(0);
   const y = ref(0);
   const active = ref(false);
+  // 指针是否在底图 contain 绘制矩形内(镜头模式出图时藏镜头、显鼠标)
+  const onImg = ref(true);
   const scale = ref(1);
   const pointX = ref(0);
   const pointY = ref(0);
@@ -40,6 +42,12 @@ export function usePanZoom(stage, viewer) {
     const p = toLocal(e);
     x.value = p.x;
     y.value = p.y;
+    // 底图 object-fit:contain 实际绘制矩形(stage 局部空间)
+    const img = stage.value.querySelector('.ugrv-a');
+    const w = stage.value.clientWidth;
+    const h = stage.value.clientHeight;
+    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    onImg.value = Math.abs(x.value - w / 2) <= (img.naturalWidth * k) / 2 && Math.abs(y.value - h / 2) <= (img.naturalHeight * k) / 2;
   }
   function move(e) {
     if (queued)
@@ -132,5 +140,5 @@ export function usePanZoom(stage, viewer) {
     return { left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` };
   });
 
-  return { x, y, active, scale, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle };
+  return { x, y, active, onImg, scale, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle };
 }
