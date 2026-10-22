@@ -93,6 +93,25 @@ function stitchedVideoGroup(root, ext, url) {
   };
 }
 
+// 文件选择:用户取消是正常流程(AbortError),返回 null 让调用方安静收手
+async function showPicker(types) {
+  try {
+    return await window.showOpenFilePicker({ types });
+  }
+  catch (e) {
+    if (e.name === 'AbortError')
+      return null;
+    throw e;
+  }
+}
+
+// 拼接视频取源哪半边:'a'(底图角色)默认左,'b'(对比角色)默认右,Tab 互换后对调
+function stitchedSides(stitched, swapped) {
+  if (!stitched)
+    return { a: 0, b: 0 };
+  return swapped ? { a: 1, b: 0 } : { a: 0, b: 1 };
+}
+
 // --- 最小 IndexedDB kv 见 src/idb.js(handles 存目录句柄) ---
 
 export function useDirPairing() {
@@ -108,18 +127,25 @@ export function useDirPairing() {
     if (!g)
       return null;
     const i = hIdx.value;
+    // 视频对另带一份载入顺序的 srcs(g.vids = [原底图, ...原对比图]):Tab 互换只改角色
+    // (.ugrv-a/.ugrv-b 与静音),不重设 src——视频元素换 src 会重载,卡一下。
+    // 必须是快照:直接引用 g.vids 的话换图后旧 pair 的 vids 也跟着变,
+    // watch 里"同一组 src 不变 = Tab 互换"的判断就会误判
+    const vids = g.vids && [g.vids[0], g.vids[1 + i] ?? g.vids[1]];
+    const swapped = !!vids && (g.stitched ? !!g.flipped : g.base !== g.vids[0]);
     return {
       base: g.base,
       hover: g.hovers[i] ?? g.hovers[0],
       key: `${dirHandle.value?.name ?? ''}/${g.baseName}|${g.hoverNames[i] ?? g.hoverNames[0]}`,
       kind: g.kind ?? 'image',
       stitched: !!g.stitched,
-      // 视频对另带一份载入顺序的 srcs(g.vids = [原底图, ...原对比图]):Tab 互换只改角色
-      // (.ugrv-a/.ugrv-b 与静音),不重设 src——视频元素换 src 会重载,卡一下。
-      // 必须是快照:直接引用 g.vids 的话换图后旧 pair 的 vids 也跟着变,
-      // watch 里"同一组 src 不变 = Tab 互换"的判断就会误判
-      vids: g.vids && [g.vids[0], g.vids[1 + i] ?? g.vids[1]],
-      swapped: !!g.vids && (g.stitched ? !!g.flipped : g.base !== g.vids[0]),
+      vids,
+      // 角色只在视频对上有意义:'a' = 底图角色,'b' = 对比角色。
+      // roles[i] 是 vids[i] 当前担任的角色;audioRole 是出声的那一路(拼接视频的对比半边恒静音)。
+      // 半边下标 0 左 1 右,只对拼接视频有效,普通两路视频各是完整一帧。
+      roles: vids && (g.stitched ? null : [swapped ? 'b' : 'a', swapped ? 'a' : 'b']),
+      audioRole: settings.audioSide === 'hover' && !g.stitched ? 'b' : 'a',
+      halfSides: stitchedSides(!!g.stitched, swapped),
     };
   });
   const needRestore = ref(false);
@@ -129,7 +155,10 @@ export function useDirPairing() {
   // 没有组时图/视频都能选,由选中的文件决定这对是什么;已有组则沿用组的类型
   async function pick(key) {
     const k = group.value?.kind;
-    const [handle] = await window.showOpenFilePicker({ types: k === 'video' ? VIDEO_TYPES : k === 'image' ? IMAGE_TYPES : MEDIA_TYPES });
+    const picked = await showPicker(k === 'video' ? VIDEO_TYPES : k === 'image' ? IMAGE_TYPES : MEDIA_TYPES);
+    if (!picked)
+      return;
+    const [handle] = picked;
     const file = await handle.getFile();
     const url = URL.createObjectURL(file);
     if (!group.value) {
@@ -161,7 +190,10 @@ export function useDirPairing() {
   // ===== 拼接图/拼接视频:一张左右拼接的图,或一段左右拼接的视频 =====
   // 图裁成两半;视频不拆不重编码,两槽共用同一个 objectURL,viewer 渲染时各裁半边
   async function pickStitched() {
-    const [handle] = await window.showOpenFilePicker({ types: MEDIA_TYPES });
+    const picked = await showPicker(MEDIA_TYPES);
+    if (!picked)
+      return;
+    const [handle] = picked;
     const file = await handle.getFile();
     const stem = stemOf(handle.name);
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;

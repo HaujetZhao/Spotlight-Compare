@@ -4,7 +4,7 @@
 // 换底图/换对比图/换拼接图按钮、光圈钉(预置 pins,收件人可左键点/右键 增删,按方向两份,会话态)、lens 圆环。
 // transform-origin 固定 0 0,光圈坐标按 (屏幕-平移)/缩放 折算回局部空间。
 // 与 App 保持的行为同步清单见 CLAUDE.md 约定 4。
-import { canvasStops, maskCSS } from './mask';
+import { canvasStops, maskCSS, MODES, RING_RADIUS } from './mask';
 import { settings } from './settings';
 
 function blobToDataURL(blob) {
@@ -38,11 +38,11 @@ async function toDataURL(url, name) {
 }
 
 // 初始遮罩渐变与导出页 stops 表都从 mask.js 派生,柔和度/模式在导出时烘焙
-// pins:钉(原图分辨率坐标,App 经 fitRect/fitK 折算),导出方向一份进 pins[0],Tab 互换后的方向 pins[1] 从空开始
+// pins:钉(原图分辨率坐标 {mx,my,size,mode},App 经 toMedia 折算),导出方向一份进 pins[0],Tab 互换后的方向 pins[1] 从空开始
 export async function exportPlayer({ urlA, urlB, nameA, nameB, name, pins = [] }) {
   const [a, b] = await Promise.all([toDataURL(urlA, nameA), toDataURL(urlB, nameB)]);
   const mask = maskCSS(settings.mode, `${settings.softness}%`);
-  const stops = JSON.stringify(Object.fromEntries(['torch', 'brush', 'spotlight', 'lens'].map(m => [m, canvasStops(m, settings.softness)])));
+  const stops = JSON.stringify(Object.fromEntries(MODES.map(m => [m, canvasStops(m, settings.softness)])));
   const pinsJson = JSON.stringify(pins);
   const cursor = settings.mode === 'lens' ? 'none' : 'crosshair';
   const html = `<!doctype html>
@@ -113,13 +113,13 @@ function pinLayers(){
   var ra=fitRect(ai),fitK=ai.naturalWidth/ra[2];
   return pins[dir].map(function(p){
     var body=stops[p.mode].map(function(q){return q[1]+' '+Math.round(q[0]*100)+'%'}).join(',');
-    return 'radial-gradient(circle '+(p.size/fitK)+'px at '+(ra[0]+p.x/fitK)+'px '+(ra[1]+p.y/fitK)+'px,'+body+')';
+    return 'radial-gradient(circle '+(p.size/fitK)+'px at '+(ra[0]+p.mx/fitK)+'px '+(ra[1]+p.my/fitK)+'px,'+body+')';
   });
 }
 function applyMask(){var m=pinLayers().concat([css(stops[mode])]).join(',');bi.style.webkitMaskImage=m;bi.style.maskImage=m}
 var ring=el.querySelector('.ugrv-ring');
 function ringVis(){var on=mode==='lens'&&onImg;ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}
-function applyRing(){var r=size*s*0.78;ring.style.left=(tx+x*s-r)+'px';ring.style.top=(ty+y*s-r)+'px';ring.style.width=ring.style.height=r*2+'px'}
+function applyRing(){var r=size*s*${RING_RADIUS};ring.style.left=(tx+x*s-r)+'px';ring.style.top=(ty+y*s-r)+'px';ring.style.width=ring.style.height=r*2+'px'}
 function setMode(m){mode=m;applyMask();el.style.cursor=m==='lens'?'none':'crosshair';ringVis()}
 function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');
   var w=el.clientWidth,h=el.clientHeight,k=Math.min(w/ai.naturalWidth,h/ai.naturalHeight),iw=ai.naturalWidth*k,ih=ai.naturalHeight*k;
@@ -136,12 +136,12 @@ function setSize(d){size=Math.max(50,Math.min(400,size+d));el.style.setProperty(
 function addPin(){
   if(!el.classList.contains('ugrv-in'))return;
   var ra=fitRect(ai),fitK=ai.naturalWidth/ra[2];
-  pins[dir].push({x:(x-ra[0])*fitK,y:(y-ra[1])*fitK,mode:mode,size:size*fitK});
+  pins[dir].push({mx:(x-ra[0])*fitK,my:(y-ra[1])*fitK,mode:mode,size:size*fitK});
   applyMask();
 }
 function unpin(){
   var ra=fitRect(ai),fitK=ai.naturalWidth/ra[2];
-  var i=pins[dir].findIndex(function(p){return Math.hypot(ra[0]+p.x/fitK-x,ra[1]+p.y/fitK-y)<=p.size/fitK});
+  var i=pins[dir].findIndex(function(p){return Math.hypot(ra[0]+p.mx/fitK-x,ra[1]+p.my/fitK-y)<=p.size/fitK});
   if(i>=0){pins[dir].splice(i,1);applyMask()}
 }
 el.addEventListener('pointerenter',show);
@@ -179,7 +179,7 @@ function composite(){
     var mk=document.createElement('canvas');mk.width=c.width;mk.height=c.height;
     var mkc=mk.getContext('2d');
     pins[dir].forEach(function(p){
-      var g=mkc.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size);
+      var g=mkc.createRadialGradient(p.mx,p.my,0,p.mx,p.my,p.size);
       stops[p.mode].forEach(function(q){g.addColorStop(q[0],q[1])});
       mkc.fillStyle=g;mkc.fillRect(0,0,mk.width,mk.height);
     });

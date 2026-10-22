@@ -7,6 +7,12 @@ const STOPS = {
 };
 STOPS.lens = STOPS.spotlight;
 
+// 模式集合(顺序即 1-4 热键顺序);导出页 stops 表、键盘切换都从这里取,别再手写列表
+export const MODES = ['torch', 'brush', 'spotlight', 'lens'];
+
+// 查看器 lens 圆环半径相对光圈 size 的比例:对齐 spotlight 渐变的可见硬边(见 STOPS.spotlight)
+export const RING_RADIUS = 0.78;
+
 // canvas addColorStop 用:'soft' → softness/100
 export function canvasStops(mode, softness) {
   return STOPS[mode].map(([o, c]) => [o === 'soft' ? softness / 100 : o, c]);

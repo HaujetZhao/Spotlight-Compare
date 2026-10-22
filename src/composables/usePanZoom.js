@@ -2,7 +2,8 @@
 // stage 有 transform(缩放/平移),指针位置经 toLocal 折算 ((屏幕 − 容器左上 − 平移) / 缩放)。
 // 缩放/平移只是观察手段,光圈中心/大小按局部空间记录。
 import { computed, ref } from 'vue';
-import { mediaSize } from '../media';
+import { RING_RADIUS } from '../mask';
+import { fitMapping } from '../media';
 import { settings } from '../settings';
 
 const MIN_SCALE = 0.1;
@@ -47,9 +48,8 @@ export function usePanZoom(stage, viewer) {
     const img = stage.value.querySelector('.front .ugrv-a');
     const w = stage.value.clientWidth;
     const h = stage.value.clientHeight;
-    const { w: sw, h: sh } = mediaSize(img);
-    const k = Math.min(w / sw, h / sh);
-    onImg.value = Math.abs(x.value - w / 2) <= (sw * k) / 2 && Math.abs(y.value - h / 2) <= (sh * k) / 2;
+    const { rect } = fitMapping(img, w, h);
+    onImg.value = Math.abs(x.value - w / 2) <= rect[2] / 2 && Math.abs(y.value - h / 2) <= rect[3] / 2;
   }
   function move(e) {
     if (queued)
@@ -123,7 +123,7 @@ export function usePanZoom(stage, viewer) {
 
   // 放大镜圆环:遮罩坐标在 stage 局部空间,圆环挂在外层不吃 transform,
   // 位置/大小要按当前 scale/translate 换算回屏幕坐标(toLocal 的逆运算);
-  // 半径 ×0.78 对齐光圈渐变的可见硬边
+  // 半径按 RING_RADIUS 对齐光圈渐变的可见硬边
   const ringStyle = computed(() => {
     const el = viewer.value;
     if (!el)
@@ -132,9 +132,9 @@ export function usePanZoom(stage, viewer) {
     const h = el.clientHeight;
     const cx = w / 2 + pointX.value + (x.value - w / 2) * scale.value;
     const cy = h / 2 + pointY.value + (y.value - h / 2) * scale.value;
-    const r = (active.value ? settings.size : 0) * scale.value * 0.78;
+    const r = (active.value ? settings.size : 0) * scale.value * RING_RADIUS;
     return { left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` };
   });
 
-  return { x, y, active, onImg, scale, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, ringStyle };
+  return { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, ringStyle };
 }

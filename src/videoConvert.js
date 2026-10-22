@@ -18,6 +18,7 @@ import {
   VideoSampleSink,
   VideoSampleSource,
 } from 'mediabunny';
+import { containRect } from './media';
 
 const open = async blob => new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
 
@@ -143,12 +144,8 @@ export async function convertComposite({
     if (hoverCur && zones.length) {
       const hw = hoverCur.displayWidth / (half ? 2 : 1);
       const hh = hoverCur.displayHeight;
-      // hover 按 contain 进画布(与查看器 fitRect 同映射)
-      const k = Math.min(w / hw, h / hh);
-      const rw = hw * k;
-      const rh = hh * k;
-      const rx = (w - rw) / 2;
-      const ry = (h - rh) / 2;
+      // hover 按 contain 进画布(与查看器 fitMapping 同映射)
+      const [rx, ry, rw, rh] = containRect(hw, hh, w, h);
       tctx.clearRect(0, 0, w, h);
       hoverCur.draw(tctx, hoverSx * hw, 0, hw, hh, rx, ry, rw, rh);
       mctx.clearRect(0, 0, w, h);

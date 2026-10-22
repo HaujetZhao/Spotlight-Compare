@@ -7,14 +7,15 @@ import PickerPage from './components/PickerPage.vue';
 import Toolbar from './components/Toolbar.vue';
 import { useDirPairing } from './composables/useDirPairing';
 import { usePanZoom } from './composables/usePanZoom';
+import { useVideoExport } from './composables/useVideoExport';
+import { useVideoSync } from './composables/useVideoSync';
+import { saveBlob } from './download';
 import { exportPlayer } from './exportPlayer';
 import { idbGet, idbSet } from './idb';
-import { canvasStops, maskCSS, pinCSS } from './mask';
-import { mediaSize } from './media';
+import { canvasStops, maskCSS, MODES, pinCSS } from './mask';
+import { fitMapping, mediaSize, toMedia } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
-import { convertComposite, offlineSupported } from './videoConvert';
-import { startRecording } from './videoRecord';
 
 const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
@@ -39,9 +40,8 @@ const stages = ref([null, null]);
 const cur = ref(0);
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-// 视频:每层一对 <video>,只有前层参与播放。声音跟 base(.ugrv-b 恒静音),Tab 互换后自然换声源;
-// 设置里选了"对比视频出声"就反过来(出声的是 hover 角色那一层)
-const hoverAudio = computed(() => settings.audioSide === 'hover');
+// 视频:每层一对 <video>,只有前层参与播放。角色与出声对应关系由 pair.roles / pair.audioRole 派生
+// (见 useDirPairing),这里只按角色 class 找 DOM,不再自行推导谁出声
 function layerVideos(front) {
   return [...(viewer.value?.querySelectorAll(`.layer${front ? '.front' : ':not(.front)'} video`) ?? [])];
 }
@@ -53,97 +53,22 @@ function waitLoaded(v) {
     ? Promise.resolve()
     : new Promise(r => ['loadeddata', 'error'].forEach(t => v.addEventListener(t, r, { once: true })));
 }
-// 时间基准取"出声的那一路"(按角色找,不依赖 DOM 顺序):音频必须连续,
-// 播放中绝不能为了对齐去 seek 它——seek 一打断音频管线就掉帧,而且 seek 落地时
-// 对方已经又跑开一截,于是每帧再 seek,变成死循环,表现就是出声那路卡、声音也卡。
-// 拼接视频的对比半边恒静音,主时钟永远在底图那一路。
-function clockOf(vs) {
-  const role = hoverAudio.value && !pair.value?.stitched ? '.ugrv-b' : '.ugrv-a';
-  return vs.find(v => v.closest(role)) ?? vs[0];
-}
-// 暂停 / 起播前一次性对齐(这时 seek 不打断播放)
-function syncSlaves() {
-  const vs = frontVideos();
-  const master = clockOf(vs);
-  if (!master)
-    return;
-  vs.forEach((v) => {
-    v.playbackRate = 1;
-    if (v !== master && Math.abs(v.currentTime - master.currentTime) > 0.001)
-      v.currentTime = master.currentTime;
-  });
-}
-// 播放中不 seek,只给落后那一路微调速率去追(±5%,看不出速度差,也绝不打断声音);
-// 差出一大截才硬对齐——而且只对齐静音那一路
-const SYNC_HARD = 0.3;
-let syncRaf = 0;
-function startSync() {
-  cancelAnimationFrame(syncRaf);
-  const step = () => {
-    const vs = frontVideos();
-    const master = clockOf(vs);
-    if (!master || master.paused)
-      return; // 停了就收手,下次 playAll 再开
-    // Tab / M 换过角色后,旧的纠偏速率不许留在主时钟上
-    if (master.playbackRate !== 1)
-      master.playbackRate = 1;
-    const t = master.currentTime;
-    vs.forEach((v) => {
-      if (v === master)
-        return;
-      const e = t - v.currentTime;
-      if (Math.abs(e) > SYNC_HARD) {
-        v.playbackRate = 1;
-        v.currentTime = t;
-      }
-      else {
-        v.playbackRate = Math.abs(e) > 0.02 ? 1 + Math.max(-0.05, Math.min(0.05, e * 0.5)) : 1;
-      }
-    });
-    syncRaf = requestAnimationFrame(step);
-  };
-  syncRaf = requestAnimationFrame(step);
-}
-// 先起出声那一路(可能被自动播放策略拦),被拦就两路都不动,等空格
-function playAll() {
-  const vs = frontVideos();
-  const master = clockOf(vs);
-  if (!master)
-    return;
-  syncSlaves();
-  // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve)
-  const started = master.play();
-  vs.filter(v => v !== master).forEach(v => v.play().catch(() => {}));
-  started?.catch(() => vs.forEach(v => v.pause()));
-  startSync();
-}
-function togglePlay() {
-  if (!pair.value?.base || !pair.value?.hover)
-    return; // 还没选齐两路,不播
-  const vs = frontVideos();
-  if (vs.some(v => !v.paused)) {
-    vs.forEach(v => v.pause());
-    syncSlaves(); // 暂停后就停在同一个时间点,画面才对得上
-  }
-  else {
-    playAll();
-  }
-}
-// 录制状态放最前:onEnded/onKey 运行时就会引用(函数声明会提升,状态声明不会)
-const recording = ref(null); // { pct },null = 没在录
-let recorder = null;
+const { playAll, togglePlay, restart, syncSlaves } = useVideoSync({ pair, frontVideos });
+const { recording, startExport, finishExport, cancelExport, handleEnded } = useVideoExport({
+  pair,
+  frontVideos,
+  syncSlaves,
+  playAll,
+  drawFrame: (canvas, zones, scratch) => compositeInto(canvas, zones, scratch),
+  nameOf: () => baseName('合成'),
+});
 
 // 任一播完:录制中则收工保存;否则两路归零重播
 function onEnded(e) {
   if (!e.target.closest('.layer')?.classList.contains('front'))
     return;
-  if (recorder)
-    return finishRecording(true);
-  frontVideos().forEach((v) => {
-    v.pause();
-    v.currentTime = 0;
-  });
-  playAll();
+  if (!handleEnded())
+    restart();
 }
 
 watch(pair, async (p, old) => {
@@ -271,19 +196,15 @@ function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA')
     return;
-  // 离线合成中:Esc 取消,其余键照常(管线读的是文件,不碰播放界面;Ctrl+S 有 converting 拦)
-  if (recording.value?.offline && e.key === 'Escape') {
-    recording.value = null;
-    return;
-  }
-  // 实时录制中只认空格(停下保存)和 Esc(取消),其余一律忽略:翻组/换声/放钉都会毁掉录制
+  // 合成/录制中只认 Esc(取消);实时录制再加空格(停下保存)。其余一律忽略:
+  // 翻组/换声/放钉都会毁掉录制,离线合成期间也会让保存的文件名对不上内容
   if (recording.value) {
-    if (e.key === ' ') {
+    if (!recording.value.offline && e.key === ' ') {
       e.preventDefault();
-      finishRecording(true);
+      finishExport(true);
     }
     else if (e.key === 'Escape') {
-      finishRecording(false);
+      cancelExport();
     }
     return;
   }
@@ -306,7 +227,6 @@ function onKey(e) {
     return;
   }
   // 1-4 切模式,[ ] 和 , . 调光圈大小,Tab 互换底图/产出
-  const MODES = ['torch', 'brush', 'spotlight', 'lens'];
   if (e.key >= '1' && e.key <= '4') {
     settings.mode = MODES[e.key - 1];
     return;
@@ -359,18 +279,7 @@ function onKey(e) {
   }
 }
 
-// object-fit:contain 实际绘制矩形(viewer 局部空间),合成与导出钉坐标共用
-function fitRectOf(el) {
-  const w = viewer.value.clientWidth;
-  const h = viewer.value.clientHeight;
-  const s = mediaSize(el);
-  const k = Math.min(w / s.w, h / s.h);
-  const iw = s.w * k;
-  const ih = s.h * k;
-  return [(w - iw) / 2, (h - ih) / 2, iw, ih];
-}
-
-// 合成绘制:图片直绘;视频取当前帧;拼接视频按 data-sx 取半边(模板里跟着 swapped 换)
+// 合成绘制:图片直绘;视频取当前帧;拼接视频按 data-sx 取半边(模板里跟着 halfSides 换)
 function drawMedia(ctx, el, dx, dy, dw, dh) {
   const v = el instanceof HTMLVideoElement ? el : el.querySelector('video');
   if (!v)
@@ -394,8 +303,7 @@ function compositeInto(canvas, zones, scratch = {}) {
   const sb = mediaB && mediaSize(mediaB);
   if (!sa?.w || !sb?.w)
     return null;
-  const ra = fitRectOf(mediaA);
-  const fitK = sa.w / ra[2];
+  const { rect: ra, k: fitK } = fitMapping(mediaA, el.clientWidth, el.clientHeight);
   if (canvas.width !== sa.w || canvas.height !== sa.h) {
     canvas.width = sa.w;
     canvas.height = sa.h;
@@ -406,7 +314,7 @@ function compositeInto(canvas, zones, scratch = {}) {
   if (zones.length) {
     // hover 图画到临时画布;各透明区先画到蒙版画布(source-over 叠加 = 并集),
     // 再一次 destination-in 抠出,叠回底图
-    const rb = fitRectOf(mediaB);
+    const { rect: rb } = fitMapping(mediaB, el.clientWidth, el.clientHeight);
     if (!scratch.temp || !scratch.mask) {
       scratch.temp = document.createElement('canvas');
       scratch.mask = document.createElement('canvas');
@@ -425,9 +333,8 @@ function compositeInto(canvas, zones, scratch = {}) {
     drawMedia(t, mediaB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
     const mc = mask.getContext('2d');
     for (const z of zones) {
-      const mx = (z.x - ra[0]) * fitK;
-      const my = (z.y - ra[1]) * fitK;
-      const g = mc.createRadialGradient(mx, my, 0, mx, my, z.size * fitK);
+      const { mx, my, size } = toMedia(z, ra, fitK);
+      const g = mc.createRadialGradient(mx, my, 0, mx, my, size);
       z.stops.forEach(([o, c]) => g.addColorStop(o, c));
       mc.fillStyle = g;
       mc.fillRect(0, 0, mask.width, mask.height);
@@ -469,107 +376,25 @@ async function downloadComposite() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   const blob = await new Promise(r => canvas.toBlob(r, `image/${fmt}`, settings.exportQuality));
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
-  a.download = `${name}.${fmt}`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  saveBlob(blob, `${baseName('合成')}.${fmt}`);
 }
 
-// Ctrl+S(视频对):合成视频。优先离线转码(原帧率、高码率、快于实时、可后台、不占播放界面),
-// WebCodecs 解不了或编码器缺才退回实时录制(从头同播,播完/空格停即存)。
-// 钉住的光圈冻成静态 mask 烧进画面,音轨取出声那路。实时录制中其余快捷键一律忽略。
-let converting = false;
+// Ctrl+S(视频对):准备光圈坐标与合成回调,离线/实时两条路径的调度见 useVideoExport
 async function recordVideo() {
-  if (recorder || converting || !pair.value?.base || !pair.value?.hover)
-    return;
-  const p = pair.value;
+  if (!pair.value?.base || !pair.value?.hover)
+    return; // 没选齐两路
   const stageZones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
-  // 光圈坐标按原图分辨率映射(与 compositeInto 同一线性映射),离线管线直接用
+  // 光圈坐标按媒体像素映射(与 compositeInto 同一线性映射),离线管线直接用
   const frontA = viewer.value?.querySelector('.layer.front .ugrv-a');
   if (!frontA)
     return;
-  const ra = fitRectOf(frontA);
-  const fitK = mediaSize(frontA).w / ra[2];
-  const zones = stageZones.map(z => ({ mx: (z.x - ra[0]) * fitK, my: (z.y - ra[1]) * fitK, size: z.size * fitK, stops: z.stops }));
-  const audioUrl = !p.stitched && hoverAudio.value ? p.hover : p.base;
-  const baseBlob = await fetch(p.base).then(r => r.blob());
-  const hoverBlob = await fetch(p.hover).then(r => r.blob());
-  try {
-    if (await offlineSupported(baseBlob, hoverBlob)) {
-      converting = true;
-      recording.value = { pct: 0, offline: true };
-      const blob = await convertComposite({
-        baseBlob,
-        hoverBlob,
-        audioBlob: audioUrl === p.base ? baseBlob : await fetch(audioUrl).then(r => r.blob()),
-        half: p.stitched,
-        // 源半边偏移只对拼接视频有意义(0 左 1 右);普通两路视频各是完整一帧
-        baseSx: p.stitched && p.swapped ? 1 : 0,
-        hoverSx: p.stitched && !p.swapped ? 1 : 0,
-        zones,
-        onProgress: pct => recording.value && (recording.value.pct = pct),
-        canceled: () => !recording.value,
-      });
-      if (blob)
-        saveBlob(blob, `${videoName()}-合成.mp4`);
-      return;
-    }
-  }
-  catch (e) {
-    console.error('离线合成失败,退回实时录制', e);
-  }
-  finally {
-    converting = false;
-    if (recording.value?.offline)
-      recording.value = null;
-  }
-  // 实时录制兜底
-  const canvas = document.createElement('canvas');
-  const scratch = {};
-  if (!compositeInto(canvas, stageZones, scratch))
-    return; // 先画一帧:定下画布尺寸、确认媒体就绪
-  recorder = startRecording(canvas, frontVideos().find(v => !v.muted));
-  syncSlaves();
-  frontVideos().forEach((v) => {
-    v.currentTime = 0;
-  });
-  playAll();
-  recording.value = { pct: 0 };
-  const dur = frontVideos()[0].duration;
-  const draw = () => {
-    if (!recorder)
-      return;
-    const vs = frontVideos();
-    if (vs.every(v => v.paused))
-      return finishRecording(true); // 空格暂停即停录保存
-    compositeInto(canvas, stageZones, scratch);
-    recording.value.pct = Math.min(1, vs[0].currentTime / dur);
-    requestAnimationFrame(draw);
-  };
-  requestAnimationFrame(draw);
+  const { rect, k } = fitMapping(frontA, viewer.value.clientWidth, viewer.value.clientHeight);
+  const zones = stageZones.map(z => ({ ...toMedia(z, rect, k), stops: z.stops }));
+  await startExport({ zones, stageZones });
 }
-function videoName() {
-  return (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
-}
-function saveBlob(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-async function finishRecording(save) {
-  const r = recorder;
-  recorder = null;
-  recording.value = null;
-  if (!r)
-    return;
-  frontVideos().forEach(v => v.pause());
-  if (!save)
-    return;
-  saveBlob(await r.stop(), `${videoName()}-合成.${r.ext}`);
+// 当前产出名(去扩展名);没有产出名退回底图名,再退回 fallback
+function baseName(fallback) {
+  return (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || fallback).replace(/\.\w+$/, '');
 }
 
 // Ctrl+E:压缩内嵌 + 拼装导出页都在 exportPlayer.js
@@ -578,15 +403,14 @@ async function exportHtml() {
     return; // 视频对不出交互页:内嵌 base64 视频体积和交互适配都不划算
   // 钉转成原图分辨率坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
   const imgA = viewer.value.querySelector('.layer.front .ugrv-a');
-  const ra = fitRectOf(imgA);
-  const fitK = mediaSize(imgA).w / ra[2];
+  const { rect, k } = fitMapping(imgA, viewer.value.clientWidth, viewer.value.clientHeight);
   await exportPlayer({
     urlA: pair.value.base,
     urlB: pair.value.hover,
     nameA: group.value?.baseName,
     nameB: group.value?.hoverNames?.[hIdx.value],
-    name: (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '对比').replace(/\.\w+$/, ''),
-    pins: pins.value.map(p => ({ x: (p.x - ra[0]) * fitK, y: (p.y - ra[1]) * fitK, mode: p.mode, size: p.size * fitK })),
+    name: baseName('对比'),
+    pins: pins.value.map(p => ({ ...toMedia(p, rect, k), mode: p.mode })),
   });
 }
 
@@ -614,19 +438,19 @@ onBeforeUnmount(() => {
         <template v-if="s?.kind === 'video' && s.stitched">
           <div class="ugrv-a ugrv-half">
             <div class="ugrv-crop" :style="cropStyle">
-              <video :src="s.vids[0]" :style="s.swapped ? cropVideoRightStyle : cropVideoStyle" :data-sx="s.swapped ? 1 : 0" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+              <video :src="s.vids[0]" :style="s.halfSides.a ? cropVideoRightStyle : cropVideoStyle" :data-sx="s.halfSides.a" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
             </div>
           </div>
           <div class="ugrv-b ugrv-half" :style="i === cur ? maskStyle : undefined">
             <div class="ugrv-crop" :style="cropStyle">
-              <video :src="s.vids[0]" :style="s.swapped ? cropVideoStyle : cropVideoRightStyle" :data-sx="s.swapped ? 0 : 1" preload="auto" playsinline muted @loadedmetadata="onMeta" @ended="onEnded" />
+              <video :src="s.vids[0]" :style="s.halfSides.b ? cropVideoRightStyle : cropVideoStyle" :data-sx="s.halfSides.b" preload="auto" playsinline muted @loadedmetadata="onMeta" @ended="onEnded" />
             </div>
           </div>
         </template>
-        <!-- 两路 src 固定按载入顺序,角色(.ugrv-a 底图出声 / .ugrv-b 静音)随 swapped 切换:Tab 互换不重载 -->
+        <!-- 两路 src 固定按载入顺序,角色(class .ugrv-a 底图 / .ugrv-b 对比)与出声由 pair.roles/audioRole 派生:Tab 互换不重载 -->
         <template v-else-if="s?.kind === 'video'">
-          <video v-if="s.vids[0]" :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="hoverAudio !== s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
-          <video v-if="s.vids[1]" :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="hoverAudio === s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[0]" :class="`ugrv-${s.roles[0]}`" :src="s.vids[0]" :muted="s.roles[0] !== s.audioRole" :style="s.roles[0] === 'b' && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[1]" :class="`ugrv-${s.roles[1]}`" :src="s.vids[1]" :muted="s.roles[1] !== s.audioRole" :style="s.roles[1] === 'b' && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
         </template>
         <template v-else-if="s">
           <img class="ugrv-a" :src="s.base" alt="底图">

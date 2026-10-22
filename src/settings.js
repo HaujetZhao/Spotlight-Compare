@@ -17,6 +17,16 @@ const DEFAULTS = {
   exportQuality: 0.9,
 };
 
-export const settings = reactive({ ...DEFAULTS, ...JSON.parse(localStorage.getItem('ugrv-settings') || '{}') });
+// localStorage 是跨会话的外部输入:解析失败(旧版本/手改坏了)就用默认值,不让整个应用起不来
+function load() {
+  try {
+    return JSON.parse(localStorage.getItem('ugrv-settings') || '{}');
+  }
+  catch {
+    return {};
+  }
+}
+
+export const settings = reactive({ ...DEFAULTS, ...load() });
 
 watch(settings, v => localStorage.setItem('ugrv-settings', JSON.stringify(v)));
