@@ -1,0 +1,27 @@
+name: Release
+
+# 推送 v* 标签时触发:构建单文件,以 Spotlight-Compare.html 附加到该标签对应的 Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # 用 npm install 而非 npm ci:lock 在 Windows 生成,含平台相关 optional 依赖,Linux 上 npm ci 会报 sync 失败。
+      - run: npm install
+      - run: npm run build
+      - name: 重命名为 Spotlight-Compare.html
+        run: mv dist/index.html Spotlight-Compare.html
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Spotlight-Compare.html
