@@ -93,7 +93,7 @@ async function scanDir(dir) {
       hovers: await Promise.all(hoverNames.sort().map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL))),
     });
   }
-  groups.value.forEach(revokePair);
+  groups.value.forEach(revokeGroup);
   groups.value = list;
   gIdx.value = 0;
   hIdx.value = 0;
