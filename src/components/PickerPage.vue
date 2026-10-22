@@ -6,10 +6,10 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
 
 <template>
   <div class="picker">
-    <h1>图片 / 视频对比查看</h1>
-    <p>选底图和对比,鼠标悬停处用手电筒光圈透出对比画面;图片、视频都行。</p>
+    <h1>聚光对比</h1>
+    <p>选「底图」和「对比」，鼠标悬停处用光圈透出对比画面，图片、视频都能对比。</p>
     <p class="hint">
-      或打开文件夹批量对比:带 "原-"(前缀,可改)的是原图,同名的其余文件作对比图;带 "拼-" 的自动拆两半。
+      或打开文件夹批量对比：带 "原-"前缀的是原图，同名的其余文件作对比图；带 "拼-" 前缀识别为拼接图，自动拆两半。
     </p>
     <button v-if="needRestore" class="restore" @click="$emit('grantRestore')">
       恢复上次的文件夹
@@ -30,10 +30,10 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
       <button class="slot" @click="$emit('pick', 'hover')">
         <video v-if="pair?.kind === 'video' && pair.hover" :src="pair.hover" muted />
         <img v-else-if="pair?.hover" :src="pair.hover" alt="对比图预览">
-        <span v-else>选择对比</span>
+        <span v-else>选对比图</span>
       </button>
       <button class="slot" title="左右拼接的一张图(拆成两半)或一段视频(不拆不重编码,各露半边)" @click="$emit('pickStitched')">
-        <span>选择拼接</span>
+        <span>选拼接图</span>
       </button>
     </div>
   </div>

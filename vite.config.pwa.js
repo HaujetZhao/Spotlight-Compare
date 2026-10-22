@@ -12,9 +12,9 @@ export default defineConfig({
       // 避免打开时被强制 reload。
       registerType: 'prompt',
       manifest: {
-        name: '图片对比查看',
-        short_name: '对比查看',
-        description: '手电筒光圈对比两张图,文件夹批量配对,支持合成导出。',
+        name: '聚光对比',
+        short_name: '聚光对比',
+        description: '光圈对比图片/视频,文件夹批量配对,支持合成导出。',
         theme_color: '#0b1020',
         background_color: '#0b1020',
         display: 'standalone',
