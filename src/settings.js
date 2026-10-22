@@ -11,7 +11,7 @@ const DEFAULTS = {
   // 拼接素材默认哪边是原图 / 原视频(Tab 仍可当场翻)
   stitchImageSide: 'left',
   stitchVideoSide: 'left',
-  // 默认出声的那一路:base = 原视频,hover = 对比视频(Tab 互换后声音跟着这段视频,不随角色换)
+  // 出声的那一路:base = 原视频,hover = 对比视频。快捷键 M 切换,跟着角色走,持久化
   audioSide: 'base',
   exportFormat: 'jpeg',
   exportQuality: 0.9,

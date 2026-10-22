@@ -276,6 +276,11 @@ function onKey(e) {
     togglePlay();
     return;
   }
+  // M 切换哪一路出声(原视频 / 对比视频),选择落 localStorage
+  if ((e.key === 'm' || e.key === 'M') && pair.value?.kind === 'video') {
+    settings.audioSide = settings.audioSide === 'base' ? 'hover' : 'base';
+    return;
+  }
   if (e.key === '?') {
     showHelp.value = !showHelp.value;
     return;
@@ -501,6 +506,13 @@ onBeforeUnmount(() => {
             <td><kbd>Tab</kbd></td><td class="act">
               互换底图/对比图
             </td>
+          </tr>
+          <tr>
+            <td><kbd>M</kbd></td><td class="act">
+              切换声音来源(原视频/对比视频)
+            </td>
+            <td />
+            <td />
           </tr>
           <tr class="grp">
             <td colspan="4">

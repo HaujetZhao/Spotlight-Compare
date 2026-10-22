@@ -146,18 +146,6 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <div class="item">
-          <label>默认出声</label>
-          <div class="seg-group">
-            <button class="seg-btn" :class="{ active: settings.audioSide === 'base' }" @click="settings.audioSide = 'base'">
-              原视频
-            </button>
-            <button class="seg-btn" :class="{ active: settings.audioSide === 'hover' }" @click="settings.audioSide = 'hover'">
-              对比视频
-            </button>
-          </div>
-        </div>
-
         <div class="separator" />
 
         <div class="item">
