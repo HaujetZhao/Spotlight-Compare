@@ -3,6 +3,8 @@
 // 圈内透出 hover 图。支持文件夹批対:按"原图标记"(前缀/后缀)配对,←/→ 翻对。
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
+import Icon from './components/Icon.vue';
+import OutputNav from './components/OutputNav.vue';
 import PickerPage from './components/PickerPage.vue';
 import Toolbar from './components/Toolbar.vue';
 import { useDirPairing } from './composables/useDirPairing';
@@ -140,17 +142,23 @@ function pin() {
 }
 // 左键抬起时位移 < 5px 且按压时长 < 300ms 才算点击放钉,拖拽/长按不放
 let downPos = null;
+// 工具栏 / 产出导航上的按下不进入拖拽与放钉流程(否则点按钮会在原地钉一枚光圈)
+function fromChrome(e) {
+  return !!e.target.closest('.toolbar, .output-nav');
+}
 function onViewDown(e) {
+  if (fromChrome(e))
+    return;
   if (e.button === 0)
     downPos = { x: e.clientX, y: e.clientY, t: performance.now() };
   onDown(e);
 }
 function onViewUp(e) {
   onUp(e);
-  if (e.button !== 0 || e.pointerType !== 'mouse' || !downPos)
-    return;
-  if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) < 5 && performance.now() - downPos.t < 300)
+  if (e.button === 0 && e.pointerType === 'mouse' && downPos && !fromChrome(e)
+    && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) < 5 && performance.now() - downPos.t < 300) {
     pin();
+  }
   downPos = null;
 }
 function unpin() {
@@ -478,13 +486,20 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" />
+    <Toolbar :count="groups.length" :g-idx="gIdx" :group-name="group?.baseName ?? ''" @nav-group="navGroup" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" />
+    <!-- 产出只有一个时整个控件不出现;放在右下角,与顶部的组导航分开 -->
+    <OutputNav
+      v-if="(group?.hovers.length ?? 0) > 1"
+      :count="group.hovers.length"
+      :index="hIdx"
+      @nav-hover="navHover"
+    />
     <!-- 左上角设置入口;mousedown 拦住,否则面板的"点外关闭"会先关掉、click 又打开 -->
     <button class="ugrv-set" title="设置" @mousedown.stop @click="showSettings = !showSettings">
-      设置
+      <Icon name="gear" />设置
     </button>
     <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
-      ?
+      <Icon name="circleQuestion" />
     </button>
     <div v-if="recording" class="ugrv-rec">
       {{ recording.offline ? '合成中' : '录制中' }} {{ Math.round(recording.pct * 100) }}% · {{ recording.offline ? 'Esc 取消' : '空格停止并保存 · Esc 取消' }}
@@ -655,8 +670,9 @@ body {
   z-index: 2;
   background: #0b1020;
 }
-.ugrv img,
-.ugrv video {
+/* 只约束双层媒体;覆盖层里的图片不能被当成底图铺满整屏 */
+.ugrv .layer img,
+.ugrv .layer video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -709,6 +725,9 @@ body {
   left: 12px;
   top: 12px;
   z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 16px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;
@@ -716,6 +735,9 @@ body {
   color: #fff;
   font: 600 12px system-ui, sans-serif;
   cursor: pointer;
+}
+.ugrv-set .fa-icon {
+  font-size: 11px;
 }
 .ugrv-set:hover {
   background: rgba(52, 64, 100, 0.9);
@@ -725,14 +747,17 @@ body {
   left: 12px;
   bottom: 12px;
   z-index: 4;
+  display: grid;
+  place-items: center;
   width: 30px;
   height: 30px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 50%;
   background: rgba(30, 40, 66, 0.8);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   color: #fff;
-  font: 700 15px system-ui, sans-serif;
+  font-size: 14px;
   cursor: pointer;
 }
 .ugrv-help:hover {

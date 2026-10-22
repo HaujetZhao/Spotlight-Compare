@@ -1,5 +1,7 @@
 <script setup>
 // 选择页:打开文件夹批量配对 / 单选底图+对比(图文通用)/ 拼接 / 恢复上次文件夹
+import Icon from './Icon.vue';
+
 defineProps({ pair: { type: Object, default: null }, needRestore: Boolean, noMatch: Boolean });
 defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
 </script>
@@ -12,7 +14,7 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
       或打开文件夹批量对比：带 "原-"前缀的是原图，同名的其余文件作对比图；带 "拼-" 前缀识别为拼接图，自动拆两半。
     </p>
     <button v-if="needRestore" class="restore" @click="$emit('grantRestore')">
-      恢复上次的文件夹
+      <Icon name="rotateLeft" />恢复上次的文件夹
     </button>
     <p v-if="noMatch" class="warn">
       没配到对:确认设置的"文件名匹配"和"原图标记"与文件名一致(默认前缀 原-),且每张原图都有不带标记的对比图。
@@ -20,19 +22,27 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
     <!-- 图与视频走同一套槽:没有配好一对之前,选中的文件类型决定这对是图还是视频 -->
     <div class="slots">
       <button class="slot big" title="按原图标记批量配对文件夹里的图片和视频" @click="$emit('openFolder')">
+        <Icon name="folderOpen" class="slot-icon" />
         <span>打开文件夹</span>
       </button>
       <button class="slot" @click="$emit('pick', 'base')">
         <video v-if="pair?.kind === 'video' && pair.base" :src="pair.base" muted />
         <img v-else-if="pair?.base" :src="pair.base" alt="底图预览">
-        <span v-else>选择底图</span>
+        <template v-else>
+          <Icon name="image" class="slot-icon" />
+          <span>选择底图</span>
+        </template>
       </button>
       <button class="slot" @click="$emit('pick', 'hover')">
         <video v-if="pair?.kind === 'video' && pair.hover" :src="pair.hover" muted />
         <img v-else-if="pair?.hover" :src="pair.hover" alt="对比图预览">
-        <span v-else>选对比图</span>
+        <template v-else>
+          <Icon name="images" class="slot-icon" />
+          <span>选对比图</span>
+        </template>
       </button>
       <button class="slot" title="左右拼接的一张图(拆成两半)或一段视频(不拆不重编码,各露半边)" @click="$emit('pickStitched')">
+        <Icon name="tableColumns" class="slot-icon" />
         <span>选拼接图</span>
       </button>
     </div>
@@ -87,9 +97,15 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
   cursor: pointer;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 0;
+}
+.slot-icon {
+  font-size: 22px;
+  opacity: 0.85;
 }
 .slot.big {
   border-color: rgba(74, 108, 247, 0.7);
@@ -105,6 +121,9 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
   object-fit: contain;
 }
 .restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 20px;
   border: none;
   border-radius: 999px;
@@ -112,5 +131,8 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
   color: #fff;
   font: 600 14px system-ui, sans-serif;
   cursor: pointer;
+}
+.restore .fa-icon {
+  font-size: 12px;
 }
 </style>

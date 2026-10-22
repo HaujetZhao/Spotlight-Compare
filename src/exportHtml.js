@@ -2,9 +2,11 @@
 // 图片与视频共用同一套导出页运行时(src/exportPage/player.js),页面本身既能加载图片也能加载视频。
 // 嵌入规则:视频原样 base64(对比的就是画质,不重编码);图片 jpg/jpeg/webp 原样,其余按面板格式/质量重编码。
 // 同一 URL 只嵌一份(拼接视频两侧共用),进度按视频字节统计。
+import appIcon from '../public/icon.svg?raw';
 import { saveBlob } from './download';
 import playerCss from './exportPage/player.css?raw';
 import playerJs from './exportPage/player.js?raw';
+import { ICONS } from './icons';
 import { canvasStops, MODES, RING_RADIUS } from './mask';
 import { settings } from './settings';
 
@@ -93,9 +95,20 @@ export async function exportHtml({ sides, name, pins = [], audioRole = 'a', onPr
     pins,
     sources,
     sides: sides.map(side => ({ src: index.get(side.url), crop: side.crop })),
+    // 导出页零依赖,图标随配置内联(与 App 同一份 FA SVG)
+    icons: {
+      circleQuestion: ICONS.circleQuestion,
+      play: ICONS.play,
+      pause: ICONS.pause,
+      image: ICONS.image,
+      images: ICONS.images,
+      tableColumns: ICONS.tableColumns,
+    },
   };
   // < 转义:数据里不会冒出 </script>
   const configJson = JSON.stringify(cfg).replace(/</g, '\\u003c');
+  // favicon 内联成 data URI:导出的 HTML 会离开项目目录,不能引用外部文件
+  const favicon = `data:image/svg+xml,${encodeURIComponent(appIcon)}`;
 
   const html = `<!doctype html>
 <html lang="zh">
@@ -103,6 +116,7 @@ export async function exportHtml({ sides, name, pins = [], audioRole = 'a', onPr
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(name)}</title>
+<link rel="icon" type="image/svg+xml" href="${favicon}">
 <style>${playerCss}</style>
 </head>
 <body>

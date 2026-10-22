@@ -9,13 +9,16 @@ html,body{margin:0;height:100%;background:#0b1020;overflow:hidden}
 .ugrv-media{position:absolute;display:block;object-fit:fill;pointer-events:none;-webkit-user-drag:none}
 .ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
 .ugrv-ring{position:absolute;z-index:3;border-radius:50%;border:2px solid rgba(255,255,255,0.85);box-shadow:0 0 0 1px rgba(0,0,0,0.35),0 10px 26px rgba(0,0,0,0.4),inset 0 0 22px rgba(255,255,255,0.16);pointer-events:none;opacity:0}
-.ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;width:30px;height:30px;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
+.ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;cursor:pointer}
 .ugrv-help:hover{background:rgba(52,64,100,0.9)}
-.ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-help svg{width:14px;height:14px;fill:currentColor;display:block}
+.ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;display:flex;align-items:center;gap:6px;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
 .ugrv-btn:hover{background:rgba(52,64,100,0.9)}
+.ugrv-btn svg{width:11px;height:11px;fill:currentColor;flex:none}
 .ugrv-btn[data-pick='b']{top:44px}
 .ugrv-btn[data-pick='s']{top:76px}
-.ugrv-play{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:4;padding:5px 22px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-play{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:6px;padding:5px 22px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-play svg{width:10px;height:10px;fill:currentColor;flex:none}
 .ugrv-play:hover{background:rgba(52,64,100,0.9)}
 .ugrv-play[hidden]{display:none}
 .ugrv-help-mask{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}

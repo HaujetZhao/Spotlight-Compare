@@ -7,14 +7,15 @@
   window.__ugrvPlayer = function (cfg) {
     const el = document.getElementById('ugrv');
     const MODES = ['torch', 'brush', 'spotlight', 'lens'];
+    const I = cfg.icons;
 
     el.innerHTML = `<div class="ugrv-stage"><div class="ugrv-side ugrv-a"><div class="ugrv-crop"></div></div><div class="ugrv-side ugrv-b"><div class="ugrv-crop"></div></div></div>
 <div class="ugrv-ring"></div>
-<button class="ugrv-help">?</button>
-<button class="ugrv-play" hidden>播放</button>
-<button class="ugrv-btn" data-pick="a">换底图</button>
-<button class="ugrv-btn" data-pick="b">换对比</button>
-<button class="ugrv-btn" data-pick="s">拼接图</button>
+<button class="ugrv-help">${I.circleQuestion}</button>
+<button class="ugrv-play" hidden></button>
+<button class="ugrv-btn" data-pick="a">${I.image}换底图</button>
+<button class="ugrv-btn" data-pick="b">${I.images}换对比</button>
+<button class="ugrv-btn" data-pick="s">${I.tableColumns}拼接图</button>
 <div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
 <tr class="grp ugrv-space-row"><td colspan="4">播放</td></tr>
 <tr class="ugrv-space-row"><td><kbd>空格</kbd></td><td class="act">播放/暂停</td><td></td><td></td></tr>
@@ -338,7 +339,7 @@
       if (!can)
         return;
       const playing = sides.some(s => !s.media.paused);
-      playBtn.textContent = playing ? '暂停' : '播放';
+      playBtn.innerHTML = `${playing ? I.pause : I.play}<span>${playing ? '暂停' : '播放'}</span>`;
     }
 
     function syncNow() {

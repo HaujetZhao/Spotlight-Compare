@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.3.1",
     "mediabunny": "^1.62.0",
     "vue": "^3.4.0"
   },
