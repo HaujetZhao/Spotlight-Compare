@@ -200,6 +200,11 @@ function onKey(e) {
     downloadComposite();
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
+    e.preventDefault();
+    exportHtml();
+    return;
+  }
   // 只有一组时,↑/↓ 退化为切换组内产出
   const single = groups.value.length < 2;
   if (e.key === 'ArrowUp')
@@ -277,6 +282,11 @@ function onUp() {
     hide();
 }
 
+// 拖拽平移(5px 阈值)
+let panning = false;
+let panStartX = 0;
+let panStartY = 0;
+
 function onWheel(e) {
   e.preventDefault();
   if (e.ctrlKey || panning) {
@@ -296,10 +306,6 @@ function onWheel(e) {
   applyTransform();
 }
 
-// 拖拽平移(5px 阈值)
-let panning = false;
-let panStartX = 0;
-let panStartY = 0;
 function onDown(e) {
   if (e.button !== 0)
     return;
@@ -416,6 +422,79 @@ async function downloadComposite() {
   a.download = `${name}.${fmt}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// Ctrl+E:当前一对图导出为内嵌 base64 的单文件 HTML。
+// 缩水版效果页:只保留光圈跟随 + 滚轮调光圈大小,不带缩放平移/模式切换/设置面板。
+async function toDataURL(url) {
+  const blob = await (await fetch(url)).blob();
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+
+// 遮罩渐变与 App 内四种模式的 CSS 一致,当前柔和度/模式烘焙进导出文件
+function exportMask() {
+  const s = settings.softness;
+  if (settings.mode === 'brush')
+    return `radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 40%, rgba(0,0,0,.6) ${s}%, transparent 100%)`;
+  if (settings.mode === 'spotlight' || settings.mode === 'lens')
+    return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 72%, transparent 78%)';
+  return `radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 16%, rgba(0,0,0,.55) ${s}%, transparent 100%)`;
+}
+
+async function exportHtml() {
+  if (!pair.value)
+    return;
+  const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '对比').replace(/\.\w+$/, '');
+  const [a, b] = await Promise.all([toDataURL(pair.value.base), toDataURL(pair.value.hover)]);
+  const mask = exportMask();
+  const cursor = settings.mode === 'lens' ? 'none' : 'crosshair';
+  const html = `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${name}</title>
+<style>
+@property --ugrv-r{syntax:"<length>";inherits:true;initial-value:0px}
+body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
+.ugrv{position:relative;width:100vw;height:100dvh;overflow:hidden;user-select:none;cursor:${cursor};--ugrv-size:${settings.size}px}
+.ugrv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+.ugrv-a{z-index:1}
+.ugrv-b{z-index:2;-webkit-mask-image:${mask};mask-image:${mask};-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.ugrv{--ugrv-r:0px}
+.ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
+</style>
+</head>
+<body>
+<div class="ugrv"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
+<script>
+(function(){
+var el=document.querySelector('.ugrv'),x=0,y=0,q=false,size=${settings.size};
+function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px')}
+function move(e){var r=el.getBoundingClientRect();x=e.clientX-r.left;y=e.clientY-r.top;if(!q){q=true;requestAnimationFrame(apply)}}
+function show(e){move(e);el.classList.add('ugrv-in')}
+function hide(){el.classList.remove('ugrv-in')}
+el.addEventListener('pointermove',move);
+el.addEventListener('pointerenter',show);
+el.addEventListener('pointerdown',show);
+el.addEventListener('pointerleave',hide);
+el.addEventListener('pointercancel',hide);
+addEventListener('wheel',function(e){size=Math.max(50,Math.min(400,size-e.deltaY*0.1));el.style.setProperty('--ugrv-size',size+'px')},{passive:true});
+})();
+</${'script'}>
+</body>
+</html>`;
+  const blob = new Blob([html], { type: 'text/html' });
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(blob);
+  el.download = `${name}.html`;
+  el.click();
+  setTimeout(() => URL.revokeObjectURL(el.href), 1000);
 }
 
 // 放大镜圆环:遮罩坐标在 stage 局部空间,圆环挂在外层不吃 transform,
