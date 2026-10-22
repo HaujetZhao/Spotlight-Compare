@@ -28,16 +28,16 @@ defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'openFolder']);
     </div>
     <div class="acts">
       <button @click="$emit('openFolder')">
-        打开文件夹
+        文件夹
       </button>
       <button title="换底图 / 换底视频" @click="$emit('pick', 'base')">
-        更换底图
+        换底图
       </button>
       <button title="换对比图 / 对比视频" @click="$emit('pick', 'hover')">
-        更换对比
+        换对比
       </button>
       <button title="选一张左右拼接的图(拆半)或一段拼接视频(各露半边)" @click="$emit('pickStitched')">
-        更换拼接
+        拼接图
       </button>
     </div>
   </div>
@@ -81,7 +81,7 @@ defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'openFolder']);
 }
 /* 与导出页按钮同一套样式;等宽让竖排不参差 */
 .acts button {
-  width: 104px;
+  width: 88px;
   padding: 5px 0;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;

@@ -85,9 +85,9 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
 <div class="ugrv-ring"></div>
 <button class="ugrv-help">?</button>
-<button class="ugrv-btn" data-pick="a">更换底图</button>
-<button class="ugrv-btn" data-pick="b">更换对比</button>
-<button class="ugrv-btn" data-pick="s">更换拼接</button>
+<button class="ugrv-btn" data-pick="a">换底图</button>
+<button class="ugrv-btn" data-pick="b">换对比</button>
+<button class="ugrv-btn" data-pick="s">拼接图</button>
 <div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
 <tr class="grp"><td colspan="4">光圈</td></tr>
 <tr><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
