@@ -1,7 +1,7 @@
 <script setup>
 // 选择页:单选两图 / 打开文件夹批量配对 / 恢复上次文件夹
 defineProps({ pair: { type: Object, default: null }, needRestore: Boolean, noMatch: Boolean });
-defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
+defineEmits(['pick', 'pickStitched', 'pickVideos', 'pickStitchedVideo', 'openFolder', 'grantRestore']);
 </script>
 
 <template>
@@ -19,18 +19,24 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
     </p>
     <div class="slots">
       <button class="slot" @click="$emit('pick', 'base')">
-        <img v-if="pair && pair.base" :src="pair.base" alt="底图预览">
+        <img v-if="pair?.base && pair.kind !== 'video'" :src="pair.base" alt="底图预览">
         <span v-else>选择底图</span>
       </button>
       <button class="slot big" @click="$emit('openFolder')">
         <span>打开文件夹</span>
       </button>
       <button class="slot" @click="$emit('pick', 'hover')">
-        <img v-if="pair && pair.hover" :src="pair.hover" alt="对比图预览">
+        <img v-if="pair?.hover && pair.kind !== 'video'" :src="pair.hover" alt="对比图预览">
         <span v-else>选择对比图</span>
       </button>
       <button class="slot" title="单张左右拼接的对比图,自动拆成两半" @click="$emit('pickStitched')">
         <span>拼接图对比</span>
+      </button>
+      <button class="slot" title="选两个视频:第 1 个当底图(出声),第 2 个当对比图(静音)" @click="$emit('pickVideos')">
+        <span>两个视频对比</span>
+      </button>
+      <button class="slot" title="选一段左右拼接的视频,左右半各作底图/对比图,不拆不重编码" @click="$emit('pickStitchedVideo')">
+        <span>拼接视频对比</span>
       </button>
     </div>
   </div>

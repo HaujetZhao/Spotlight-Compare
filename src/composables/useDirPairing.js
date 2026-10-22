@@ -5,6 +5,8 @@ import { idbGet, idbSet } from '../idb';
 import { settings } from '../settings';
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
+const IMAGE_TYPES = [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }];
+const VIDEO_TYPES = [{ description: '视频', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.m4v'] } }];
 
 function revokeGroup(g) {
   URL.revokeObjectURL(g.base);
@@ -76,6 +78,8 @@ export function useDirPairing() {
       base: g.base,
       hover: g.hovers[i] ?? g.hovers[0],
       key: `${dirHandle.value?.name ?? ''}/${g.baseName}|${g.hoverNames[i] ?? g.hoverNames[0]}`,
+      kind: g.kind ?? 'image',
+      stitched: !!g.stitched,
     };
   });
   const needRestore = ref(false);
@@ -83,9 +87,8 @@ export function useDirPairing() {
 
   // ===== 单独换图:替换当前组的原图 / 当前选中那张产出 =====
   async function pick(key) {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }],
-    });
+    // 换图沿用当前组的媒体类型:视频对里换的必须是视频
+    const [handle] = await window.showOpenFilePicker({ types: group.value?.kind === 'video' ? VIDEO_TYPES : IMAGE_TYPES });
     const url = URL.createObjectURL(await handle.getFile());
     if (!group.value) {
       groups.value = [{ base: '', hovers: [''], baseName: '', hoverNames: [''] }];
@@ -109,14 +112,39 @@ export function useDirPairing() {
 
   // ===== 拼接图:单张左右拼接图裁成两半,当作普通一对走全流程 =====
   async function pickStitched() {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }],
-    });
+    const [handle] = await window.showOpenFilePicker({ types: IMAGE_TYPES });
     const { left, right } = await cutHalves(await handle.getFile());
     groups.value.forEach(revokeGroup);
     const stem = stemOf(handle.name);
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
     groups.value = [{ base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] }];
+    gIdx.value = 0;
+    hIdx.value = 0;
+  }
+
+  // ===== 视频:选两个视频(第 1 个底图、第 2 个对比图)=====
+  async function pickVideos() {
+    const handles = await window.showOpenFilePicker({ multiple: true, types: VIDEO_TYPES });
+    if (handles.length < 2)
+      return;
+    const [a, b] = handles;
+    const urls = await Promise.all([a.getFile(), b.getFile()].map(f => f.then(URL.createObjectURL)));
+    groups.value.forEach(revokeGroup);
+    groups.value = [{ kind: 'video', base: urls[0], hovers: [urls[1]], baseName: a.name, hoverNames: [b.name] }];
+    gIdx.value = 0;
+    hIdx.value = 0;
+  }
+
+  // ===== 拼接视频:一段左右拼接的视频,左右半各作底图/对比图 =====
+  // 不拆、不重编码:两槽共用同一个 objectURL,viewer 渲染时各裁半边
+  async function pickStitchedVideo() {
+    const [handle] = await window.showOpenFilePicker({ types: VIDEO_TYPES });
+    const url = URL.createObjectURL(await handle.getFile());
+    const stem = stemOf(handle.name);
+    const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
+    const e = handle.name.slice(handle.name.lastIndexOf('.'));
+    groups.value.forEach(revokeGroup);
+    groups.value = [{ kind: 'video', stitched: true, base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] }];
     gIdx.value = 0;
     hIdx.value = 0;
   }
@@ -222,5 +250,5 @@ export function useDirPairing() {
     groups.value.forEach(revokeGroup);
   }
 
-  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
+  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, pickVideos, pickStitchedVideo, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
 }

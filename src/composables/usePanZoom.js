@@ -2,6 +2,7 @@
 // stage 有 transform(缩放/平移),指针位置经 toLocal 折算 ((屏幕 − 容器左上 − 平移) / 缩放)。
 // 缩放/平移只是观察手段,光圈中心/大小按局部空间记录。
 import { computed, ref } from 'vue';
+import { mediaSize } from '../media';
 import { settings } from '../settings';
 
 const MIN_SCALE = 0.1;
@@ -46,8 +47,9 @@ export function usePanZoom(stage, viewer) {
     const img = stage.value.querySelector('.front .ugrv-a');
     const w = stage.value.clientWidth;
     const h = stage.value.clientHeight;
-    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-    onImg.value = Math.abs(x.value - w / 2) <= (img.naturalWidth * k) / 2 && Math.abs(y.value - h / 2) <= (img.naturalHeight * k) / 2;
+    const { w: sw, h: sh } = mediaSize(img);
+    const k = Math.min(w / sw, h / sh);
+    onImg.value = Math.abs(x.value - w / 2) <= (sw * k) / 2 && Math.abs(y.value - h / 2) <= (sh * k) / 2;
   }
   function move(e) {
     if (queued)

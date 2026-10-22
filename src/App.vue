@@ -10,10 +10,11 @@ import { usePanZoom } from './composables/usePanZoom';
 import { exportPlayer } from './exportPlayer';
 import { idbGet, idbSet } from './idb';
 import { canvasStops, maskCSS, pinCSS } from './mask';
+import { mediaSize } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
-const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
+const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, pickVideos, pickStitchedVideo, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
 const showHelp = ref(false);
 const viewer = ref(null);
@@ -35,26 +36,74 @@ watch(pins, () => {
 const stages = ref([null, null]);
 const cur = ref(0);
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-watch(pair, async (p) => {
+
+// 视频:每层一对 <video>,只有前层参与播放。声音跟 base(.ugrv-b 恒静音),Tab 互换后自然换声源
+function layerVideos(front) {
+  return [...(viewer.value?.querySelectorAll(`.layer${front ? '.front' : ':not(.front)'} video`) ?? [])];
+}
+function frontVideos() {
+  return layerVideos(true);
+}
+function waitLoaded(v) {
+  return v.readyState >= 2
+    ? Promise.resolve()
+    : new Promise(r => ['loadeddata', 'error'].forEach(t => v.addEventListener(t, r, { once: true })));
+}
+// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格
+function playAll() {
+  const [a, b] = frontVideos(); // DOM 顺序:底图在前
+  a?.play().then(() => b?.play()).catch(() => {});
+}
+function togglePlay() {
+  const vs = frontVideos();
+  if (vs.some(v => !v.paused))
+    vs.forEach(v => v.pause());
+  else playAll();
+}
+// 任一播完:两路归零重播
+function onEnded(e) {
+  if (!e.target.closest('.layer')?.classList.contains('front'))
+    return;
+  frontVideos().forEach((v) => {
+    v.pause();
+    v.currentTime = 0;
+  });
+  playAll();
+}
+
+watch(pair, async (p, old) => {
   if (!p) {
+    [...layerVideos(true), ...layerVideos(false)].forEach(v => v.pause());
     stages.value = [null, null];
     pins.value = [];
     pinsKey = null;
     return;
   }
-  try {
-    await Promise.all([p.base, p.hover].map((u) => {
-      const img = new Image();
-      img.src = u;
-      return img.decode();
-    }));
+  // Tab 互换 = 同一对视频换方向:进度和暂停状态延续,不从头播
+  const swap = old?.kind === 'video' && p.base === old.hover && p.hover === old.base;
+  const pos = swap ? (frontVideos()[0]?.currentTime ?? 0) : 0;
+  const wasPlaying = swap && frontVideos().some(v => !v.paused);
+  if (p.kind === 'video') {
+    // 视频没有离散的 decode:先挂上背层元素,等它们出第一帧再翻层
+    stages.value[1 - cur.value] = p;
+    await nextTick();
+    await Promise.all(layerVideos(false).map(waitLoaded));
   }
-  catch {
-    // 坏图不等 decode,直接上(显示为空白,比卡住好)
+  else {
+    try {
+      await Promise.all([p.base, p.hover].map((u) => {
+        const img = new Image();
+        img.src = u;
+        return img.decode();
+      }));
+    }
+    catch {
+      // 坏图不等 decode,直接上(显示为空白,比卡住好)
+    }
+    if (pair.value !== p)
+      return; // decode 期间已切到别的对,丢弃
+    stages.value[1 - cur.value] = p;
   }
-  if (pair.value !== p)
-    return; // decode 期间已切到别的对,丢弃
-  stages.value[1 - cur.value] = p;
   await nextTick();
   await raf2(); // 等背层画完一帧
   if (pair.value !== p)
@@ -64,7 +113,16 @@ watch(pair, async (p) => {
   if (pair.value !== p)
     return;
   pins.value = rec?.pins ?? [];
+  const oldFront = frontVideos();
   cur.value = 1 - cur.value; // 翻层:新图 + 新 mask 同帧生效
+  oldFront.forEach(v => v.pause()); // 旧前层退到背层:不暂停照样出声、吃解码
+  if (p.kind === 'video') {
+    await nextTick(); // cur 刚改,DOM 还没翻层,等刷完再取新的前层
+    const vs = frontVideos();
+    vs.forEach(v => v.currentTime = pos);
+    if (!swap || wasPlaying)
+      playAll();
+  }
 });
 function pin() {
   if (!active.value)
@@ -95,6 +153,40 @@ function unpin() {
 const maskValue = computed(() => [...pins.value.map(pinCSS), maskCSS(settings.mode)].join(', '));
 const maskStyle = computed(() => ({ webkitMaskImage: maskValue.value, maskImage: maskValue.value }));
 
+// 拼接视频裁半:半边比例 contain 进视口,CSS 做不到(宽高都受 max 约束时 aspect-ratio 不会反推),
+// 这里按视口尺寸算裁切框,视频按 2 倍宽铺进去,只露一半
+const viewSize = ref({ w: window.innerWidth, h: window.innerHeight });
+const mediaDims = ref(null);
+function onResize() {
+  viewSize.value = { w: window.innerWidth, h: window.innerHeight };
+}
+const halfBox = computed(() => {
+  const d = mediaDims.value;
+  if (!d?.w)
+    return null;
+  const { w: vw, h: vh } = viewSize.value;
+  const k = Math.min(vw / (d.w / 2), vh / d.h);
+  const w = (d.w / 2) * k;
+  const h = d.h * k;
+  return { x: (vw - w) / 2, y: (vh - h) / 2, w, h };
+});
+const cropStyle = computed(() => {
+  const b = halfBox.value;
+  return b && { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` };
+});
+const cropVideoStyle = computed(() => {
+  const b = halfBox.value;
+  return b && { left: '0', top: '0', width: `${b.w * 2}px`, height: `${b.h}px` };
+});
+// 右半:视频左移一个裁切框宽,hover 槽露右半
+const cropVideoRightStyle = computed(() => {
+  const b = halfBox.value;
+  return b && { left: `${-b.w}px`, top: '0', width: `${b.w * 2}px`, height: `${b.h}px` };
+});
+function onMeta(e) {
+  mediaDims.value = { w: e.target.videoWidth, h: e.target.videoHeight };
+}
+
 function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA')
@@ -123,6 +215,12 @@ function onKey(e) {
   if (e.key === 'Tab') {
     e.preventDefault();
     swapPair();
+    return;
+  }
+  // 视频对:空格播放/暂停;图片对仍是切组(见下方)
+  if (e.key === ' ' && pair.value?.kind === 'video') {
+    e.preventDefault();
+    togglePlay();
     return;
   }
   if (e.key === '?') {
@@ -158,14 +256,25 @@ function onKey(e) {
 }
 
 // object-fit:contain 实际绘制矩形(viewer 局部空间),合成与导出钉坐标共用
-function fitRectOf(img) {
-  const el = viewer.value;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-  const iw = img.naturalWidth * k;
-  const ih = img.naturalHeight * k;
+function fitRectOf(el) {
+  const w = viewer.value.clientWidth;
+  const h = viewer.value.clientHeight;
+  const s = mediaSize(el);
+  const k = Math.min(w / s.w, h / s.h);
+  const iw = s.w * k;
+  const ih = s.h * k;
   return [(w - iw) / 2, (h - ih) / 2, iw, ih];
+}
+
+// 合成绘制:图片直绘;视频取当前帧;拼接视频 base 取左半、hover 取右半(源矩形裁切)
+function drawMedia(ctx, el, dx, dy, dw, dh) {
+  const v = el instanceof HTMLVideoElement ? el : el.querySelector('video');
+  if (!v)
+    return ctx.drawImage(el, dx, dy, dw, dh);
+  const half = el.classList.contains('ugrv-half');
+  const sw = v.videoWidth / (half ? 2 : 1);
+  const sx = half && el.classList.contains('ugrv-b') ? sw : 0;
+  ctx.drawImage(v, sx, 0, sw, v.videoHeight, dx, dy, dw, dh);
 }
 
 // 合成当前叠加效果(底图 + 光圈内透出的 hover 图 + 钉)到原图分辨率画布。
@@ -174,26 +283,28 @@ function fitRectOf(img) {
 // 未 hover 且无钉时即纯原图。图片未就绪返回 null。
 function compositeCanvas() {
   const el = viewer.value;
-  const imgA = el?.querySelector('.layer.front .ugrv-a');
-  const imgB = el?.querySelector('.layer.front .ugrv-b');
-  if (!imgA || !imgB || !imgA.naturalWidth || !imgB.naturalWidth)
+  const mediaA = el?.querySelector('.layer.front .ugrv-a');
+  const mediaB = el?.querySelector('.layer.front .ugrv-b');
+  const sa = mediaA && mediaSize(mediaA);
+  const sb = mediaB && mediaSize(mediaB);
+  if (!sa?.w || !sb?.w)
     return null;
-  const ra = fitRectOf(imgA);
-  const fitK = imgA.naturalWidth / ra[2];
+  const ra = fitRectOf(mediaA);
+  const fitK = sa.w / ra[2];
   const canvas = document.createElement('canvas');
-  canvas.width = imgA.naturalWidth;
-  canvas.height = imgA.naturalHeight;
+  canvas.width = sa.w;
+  canvas.height = sa.h;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(imgA, 0, 0);
+  drawMedia(ctx, mediaA, 0, 0, sa.w, sa.h);
   if (active.value || pins.value.length) {
     // hover 图画到临时画布;各透明区(钉住 + 当前光圈)先画到蒙版画布(source-over 叠加 = 并集),
     // 再一次 destination-in 抠出,叠回底图
-    const rb = fitRectOf(imgB);
+    const rb = fitRectOf(mediaB);
     const temp = document.createElement('canvas');
     temp.width = canvas.width;
     temp.height = canvas.height;
     const t = temp.getContext('2d');
-    t.drawImage(imgB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
+    drawMedia(t, mediaB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
     const mask = document.createElement('canvas');
     mask.width = canvas.width;
     mask.height = canvas.height;
@@ -249,12 +360,12 @@ async function downloadComposite() {
 
 // Ctrl+E:压缩内嵌 + 拼装导出页都在 exportPlayer.js
 async function exportHtml() {
-  if (!pair.value)
-    return;
+  if (!pair.value || pair.value.kind === 'video')
+    return; // 视频对不出交互页:内嵌 base64 视频体积和交互适配都不划算
   // 钉转成原图分辨率坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
   const imgA = viewer.value.querySelector('.layer.front .ugrv-a');
   const ra = fitRectOf(imgA);
-  const fitK = imgA.naturalWidth / ra[2];
+  const fitK = mediaSize(imgA).w / ra[2];
   await exportPlayer({
     urlA: pair.value.base,
     urlB: pair.value.hover,
@@ -269,12 +380,14 @@ onMounted(() => {
   window.addEventListener('keydown', onKey);
   window.addEventListener('mousemove', onPanMove);
   window.addEventListener('mouseup', onPanUp);
+  window.addEventListener('resize', onResize);
   restore();
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey);
   window.removeEventListener('mousemove', onPanMove);
   window.removeEventListener('mouseup', onPanUp);
+  window.removeEventListener('resize', onResize);
   dispose();
 });
 </script>
@@ -283,14 +396,32 @@ onBeforeUnmount(() => {
   <div v-if="stages[cur]" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @contextmenu.prevent="unpin" @dragstart.prevent>
     <div ref="stage" class="stage">
       <div v-for="(s, i) in stages" :key="i" class="layer" :class="{ front: i === cur }">
-        <template v-if="s">
+        <!-- 拼接视频:同一段视频左右各露一半;wrapper 占满 stage 承载 mask,裁切框按视口算 -->
+        <template v-if="s?.kind === 'video' && s.stitched">
+          <div class="ugrv-a ugrv-half">
+            <div class="ugrv-crop" :style="cropStyle">
+              <video :src="s.base" preload="auto" playsinline :style="cropVideoStyle" @loadedmetadata="onMeta" @ended="onEnded" />
+            </div>
+          </div>
+          <div class="ugrv-b ugrv-half" :style="i === cur ? maskStyle : undefined">
+            <div class="ugrv-crop" :style="cropStyle">
+              <video :src="s.hover" preload="auto" playsinline muted :style="cropVideoRightStyle" @loadedmetadata="onMeta" @ended="onEnded" />
+            </div>
+          </div>
+        </template>
+        <template v-else-if="s?.kind === 'video'">
+          <video class="ugrv-a" :src="s.base" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <!-- 对比视频恒静音:只播底图声音 -->
+          <video class="ugrv-b" :src="s.hover" preload="auto" playsinline muted :style="i === cur ? maskStyle : undefined" @ended="onEnded" />
+        </template>
+        <template v-else-if="s">
           <img class="ugrv-a" :src="s.base" alt="底图">
           <img class="ugrv-b" :src="s.hover" alt="对比图" :style="i === cur ? maskStyle : undefined">
         </template>
       </div>
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
+    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @pick-videos="pickVideos" @pick-stitched-video="pickStitchedVideo" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
     <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
       ?
     </button>
@@ -304,7 +435,7 @@ onBeforeUnmount(() => {
             </td>
           </tr>
           <tr>
-            <td><kbd>↑/↓</kbd> <kbd>空格</kbd> <kbd>退格</kbd></td><td class="act">
+            <td><kbd>↑/↓</kbd> <kbd>退格</kbd></td><td class="act">
               切组
             </td>
             <td><kbd>←/→</kbd></td><td class="act">
@@ -312,11 +443,12 @@ onBeforeUnmount(() => {
             </td>
           </tr>
           <tr>
+            <td><kbd>空格</kbd></td><td class="act">
+              视频播放/暂停(图片为切组)
+            </td>
             <td><kbd>Tab</kbd></td><td class="act">
               互换底图/对比图
             </td>
-            <td />
-            <td />
           </tr>
           <tr class="grp">
             <td colspan="4">
@@ -384,7 +516,7 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
+  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @pick-videos="pickVideos" @pick-stitched-video="pickStitchedVideo" @open-folder="openFolder" @grant-restore="grantRestore" />
 
   <SettingsPanel v-model="showSettings" />
 </template>
@@ -447,13 +579,27 @@ body {
   z-index: 2;
   background: #0b1020;
 }
-.ugrv img {
+.ugrv img,
+.ugrv video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+}
+.ugrv-half {
+  position: absolute;
+  inset: 0;
+}
+.ugrv-crop {
+  position: absolute;
+  overflow: hidden;
+}
+/* 拼接视频:视频按 2 倍宽铺进裁切框(框比例与视频一致,不拉伸),只露一半 */
+.ugrv-crop video {
+  inset: auto;
+  object-fit: fill;
 }
 .ugrv-a {
   z-index: 1;
