@@ -28,6 +28,7 @@ npm run lint:fix   # 自动修格式
 src/
 ├── main.js                    # createApp 入口
 ├── settings.js                # 预览参数单例:reactive + localStorage 持久化,App/SettingsPanel/导出逻辑共享
+├── idb.js                     # 最小 IndexedDB kv:handles 存目录句柄,pairs 存按对绑定的状态
 ├── mask.js                    # 光圈渐变单表(STOPS)+ 派生 maskCSS/canvasStops,三处共用
 ├── exportPlayer.js            # 导出交互式单文件 HTML(压缩分流 + 自包含模板)
 ├── App.vue                    # 编排层:composable 接线/键盘路由/合成导出调用/查看器全局 CSS
@@ -50,10 +51,11 @@ public/icon.svg                # PWA/manifest 图标
 4. **导出页是自包含模板字符串**(`exportPlayer.js`):内嵌 base64 图 + 缩水版交互,与 App 保持的行为同步清单——光圈跟随、滚轮缩放(以鼠标为中心)、拖拽平移、Ctrl+滚轮调光圈、双击复位、热键(1-4 切模式 / `[ ] , .` 调光圈 / Tab 互换底图对比图 / Ctrl+S 下载 / Ctrl+C 复制 / `?` 帮助)、换底图/换对比图/换拼接图按钮(拼接图在导出页内拆半)、lens 圆环(半径 ×0.78 对齐渐变硬边)、镜头模式出底图范围时藏镜头显鼠标(`onImg`)。改 App 交互后检查导出页是否要跟。
 5. **导出压缩**:内嵌图按扩展名分流——`jpg/jpeg/webp` 源文件原样嵌入不重编码,其余格式画布重编码(面板格式/质量,JPEG 垫白底)。
 6. **objectURL 生命周期**:配对扫描/单换图时旧 URL 必须 revoke(`revokeGroup`/`pick` 内),卸载时兜底清全量。
-7. **目录句柄持久化**:只有 dir handle 存 IndexedDB(手写最小 kv,无依赖);刷新后浏览器要求一次用户点击重新授权(`needRestore` 流程)。
+7. **持久化**:[idb.js](src/idb.js) 是手写最小 IndexedDB kv(无依赖)——`handles` store 存 dir handle(不可 JSON 序列化),`pairs` store 按 `pair.key` 存每对的状态记录(`{ pins: [...], ...以后每对的其他数值 }`);刷新后浏览器要求一次用户点击重新授权(`needRestore` 流程)。
 8. **配对规则**:`stemOf` 去扩展名 + 去任意位置的括号备注;带标记的进 base 槽(每根至多一张),不带的全部归该根的 hovers;标记改动防抖 300ms 自动重扫。
 9. **拼接图**:`pickStitched()`(单选)与文件夹扫描(带拼接图标记的单文件,标记在设置面板,默认 `拼-`)把左右拼接图经 `cutHalves()` 裁成两半(`floor(w/2)` 等宽保证 1:1 对应,PNG 无损编码)后当普通一对走全流程——viewer/合成/导出零特判;`Tab` 互换 base 与当前产出(名字一起换,原图在右边时用)。
-10. **光圈钉**:`pair.key`(目录/底图名|产出名,方向性)是按对绑定状态的稳定标识(objectURL 刷新即失效不能用);钉表存 localStorage `ugrv-pins`,文件夹恢复后钉跟着恢复,Tab 互换算新的一对。
+10. **光圈钉**:`pair.key`(目录/底图名|产出名,方向性)是按对绑定状态的稳定标识(objectURL 刷新即失效不能用);钉按 key 存 IDB `pairs` store,文件夹恢复后钉跟着恢复,Tab 互换算新的一对。
+11. **切图同步**:viewer 是双层 stage(`stages`/`cur`,前层不透明底色挡背层)——新一对 decode 完填背层、画完一帧后翻层,新图与新遮罩严格同帧;钉的加载也压到翻层前一刻。`pair` 是目标态,其他逻辑(钉、导出、合成)都读 `pair`;读 DOM(合成/onImg)要取 `.layer.front`。
 
 ## 快捷键(App 与导出页一致)
 

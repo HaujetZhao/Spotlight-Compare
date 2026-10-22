@@ -42,8 +42,8 @@ export function usePanZoom(stage, viewer) {
     const p = toLocal(e);
     x.value = p.x;
     y.value = p.y;
-    // 底图 object-fit:contain 实际绘制矩形(stage 局部空间)
-    const img = stage.value.querySelector('.ugrv-a');
+    // 底图 object-fit:contain 实际绘制矩形(stage 局部空间);双层缓冲,取前层
+    const img = stage.value.querySelector('.front .ugrv-a');
     const w = stage.value.clientWidth;
     const h = stage.value.clientHeight;
     const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);

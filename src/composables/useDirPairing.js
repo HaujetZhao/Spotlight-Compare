@@ -1,6 +1,7 @@
 // 文件夹批量配对:按"原图标记"(前缀/后缀)把目录文件配成组(一张原图 + 若干产出),
 // 维护 groups/gIdx/hIdx 与翻页;目录句柄存 IndexedDB,刷新后一键恢复(重新授权需一次用户点击)。
 import { computed, ref, watch } from 'vue';
+import { idbGet, idbSet } from '../idb';
 import { settings } from '../settings';
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
@@ -56,32 +57,7 @@ async function cutHalves(file) {
   return { left, right };
 }
 
-// --- 最小 IndexedDB 存取(只存目录句柄) ---
-function idb() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open('img-hover-reveal', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('handles');
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-async function idbSet(key, val) {
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').put(val, key);
-    tx.oncomplete = res;
-    tx.onerror = () => rej(tx.error);
-  });
-}
-async function idbGet(key) {
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const rq = db.transaction('handles').objectStore('handles').get(key);
-    rq.onsuccess = () => res(rq.result);
-    rq.onerror = () => rej(rq.error);
-  });
-}
+// --- 最小 IndexedDB kv 见 src/idb.js(handles 存目录句柄) ---
 
 export function useDirPairing() {
   const groups = ref([]); // [{ base, hovers: [url], baseName, hoverNames }]
@@ -194,7 +170,7 @@ export function useDirPairing() {
 
   async function openFolder() {
     const dir = await window.showDirectoryPicker({ mode: 'read' });
-    await idbSet('dir', dir);
+    await idbSet('handles', 'dir', dir);
     dirHandle.value = dir;
     needRestore.value = false;
     await scanDir(dir);
@@ -202,7 +178,7 @@ export function useDirPairing() {
 
   // 刷新后恢复:目录句柄已授权则直接扫描,否则等用户点"恢复"
   async function restore() {
-    const dir = await idbGet('dir');
+    const dir = await idbGet('handles', 'dir');
     if (!dir)
       return;
     dirHandle.value = dir;

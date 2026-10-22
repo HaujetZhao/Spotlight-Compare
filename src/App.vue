@@ -2,12 +2,13 @@
 // 手电筒对比:底图铺满,hover 图在上层用 radial-gradient 圆形遮罩跟随指针(延迟 0),
 // 圈内透出 hover 图。支持文件夹批対:按"原图标记"(前缀/后缀)配对,←/→ 翻对。
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
 import PickerPage from './components/PickerPage.vue';
 import Toolbar from './components/Toolbar.vue';
 import { useDirPairing } from './composables/useDirPairing';
 import { usePanZoom } from './composables/usePanZoom';
 import { exportPlayer } from './exportPlayer';
+import { idbGet, idbSet } from './idb';
 import { canvasStops, maskCSS, pinCSS } from './mask';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
@@ -19,19 +20,50 @@ const stage = ref(null);
 const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
 
 // 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚。
-// 钉按 pair.key(目录/底图名|产出名,方向性)各存一份:Tab 互换是新的一对,换回原方向时原来的钉回来;
-// 钉表落 localStorage,文件夹恢复后钉跟着恢复
+// 按 pair.key(目录/底图名|产出名,方向性)存 IDB pairs store,一条记录 { pins: [...], ...以后每对的其他数值 };
+// Tab 互换是新的一对,换回原方向时原来的钉回来;文件夹恢复后钉跟着恢复
 const pins = ref([]);
-const pinsByPair = new Map(JSON.parse(localStorage.getItem('ugrv-pins') || '[]'));
-watch(pins, () => localStorage.setItem('ugrv-pins', JSON.stringify([...pinsByPair])), { deep: true });
-watch(pair, (p) => {
+let pinsKey = null;
+watch(pins, () => {
+  if (pinsKey)
+    idbSet('pairs', pinsKey, { pins: toRaw(pins.value) }); // IDB 结构化克隆不认 reactive 代理,写原始数据
+}, { deep: true });
+
+// 双层显示缓冲:新一对 decode 完填进背层(前层纹丝不动),浏览器画完一帧后连同新钉的 mask 一起翻到前层——
+// 图与遮罩严格同帧出现。钉的加载压到翻层前一刻,避免新对的 mask 提前落在旧图上
+const stages = ref([null, null]);
+const cur = ref(0);
+const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+watch(pair, async (p) => {
   if (!p) {
+    stages.value = [null, null];
     pins.value = [];
+    pinsKey = null;
     return;
   }
-  if (!pinsByPair.has(p.key))
-    pinsByPair.set(p.key, []);
-  pins.value = pinsByPair.get(p.key);
+  try {
+    await Promise.all([p.base, p.hover].map((u) => {
+      const img = new Image();
+      img.src = u;
+      return img.decode();
+    }));
+  }
+  catch {
+    // 坏图不等 decode,直接上(显示为空白,比卡住好)
+  }
+  if (pair.value !== p)
+    return; // decode 期间已切到别的对,丢弃
+  stages.value[1 - cur.value] = p;
+  await nextTick();
+  await raf2(); // 等背层画完一帧
+  if (pair.value !== p)
+    return;
+  pinsKey = p.key;
+  const rec = await idbGet('pairs', p.key);
+  if (pair.value !== p)
+    return;
+  pins.value = rec?.pins ?? [];
+  cur.value = 1 - cur.value; // 翻层:新图 + 新 mask 同帧生效
 });
 function pin() {
   if (!active.value)
@@ -58,8 +90,9 @@ function unpin() {
   if (hit >= 0)
     pins.value.splice(hit, 1);
 }
-// ugrv-b 的 mask:钉住层 + 实时层,逗号并列成多层(union)
+// ugrv-b 的 mask:钉住层 + 实时层,逗号并列成多层(union);只挂前层,背层不随光圈重画
 const maskValue = computed(() => [...pins.value.map(pinCSS), maskCSS(settings.mode)].join(', '));
+const maskStyle = computed(() => ({ webkitMaskImage: maskValue.value, maskImage: maskValue.value }));
 
 function onKey(e) {
   const tag = document.activeElement?.tagName;
@@ -121,8 +154,8 @@ function onKey(e) {
 // 未 hover 时即纯原图。图片未就绪返回 null。
 function compositeCanvas() {
   const el = viewer.value;
-  const imgA = el?.querySelector('.ugrv-a');
-  const imgB = el?.querySelector('.ugrv-b');
+  const imgA = el?.querySelector('.layer.front .ugrv-a');
+  const imgB = el?.querySelector('.layer.front .ugrv-b');
   if (!imgA || !imgB || !imgA.naturalWidth || !imgB.naturalWidth)
     return null;
   const w = el.clientWidth;
@@ -230,10 +263,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @dblclick="onDblClick" @contextmenu.prevent="unpin" @dragstart.prevent>
+  <div v-if="stages[cur]" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @dblclick="onDblClick" @contextmenu.prevent="unpin" @dragstart.prevent>
     <div ref="stage" class="stage">
-      <img class="ugrv-a" :src="pair.base" alt="底图">
-      <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskValue, maskImage: maskValue }">
+      <div v-for="(s, i) in stages" :key="i" class="layer" :class="{ front: i === cur }">
+        <template v-if="s">
+          <img class="ugrv-a" :src="s.base" alt="底图">
+          <img class="ugrv-b" :src="s.hover" alt="对比图" :style="i === cur ? maskStyle : undefined">
+        </template>
+      </div>
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
     <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
@@ -287,6 +324,16 @@ body {
   position: absolute;
   inset: 0;
   z-index: 1;
+}
+/* 双层显示缓冲:前层不透明底色挡住背层(含 letterbox 区),翻层即整帧切换 */
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.layer.front {
+  z-index: 2;
+  background: #0b1020;
 }
 .ugrv img {
   position: absolute;
