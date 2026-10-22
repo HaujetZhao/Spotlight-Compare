@@ -495,10 +495,30 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 .ugrv-b{z-index:2;-webkit-mask-image:${mask};mask-image:${mask};-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .ugrv{--ugrv-r:0px}
 .ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
+.ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;width:30px;height:30px;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
+.ugrv-help:hover{background:rgba(52,64,100,0.9)}
+.ugrv-help-mask{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}
+.ugrv-help-mask.ugrv-on{display:flex}
+.ugrv-card{min-width:340px;padding:20px 26px;border:1px solid rgba(255,255,255,0.14);border-radius:14px;background:rgba(16,22,40,0.92);color:#fff}
+.ugrv-card h3{margin:0 0 14px;font:600 14px system-ui,sans-serif;opacity:0.9}
+.ugrv-card table{border-collapse:collapse;font:13px system-ui,sans-serif}
+.ugrv-card td{padding:5px 0}
+.ugrv-card td:first-child{padding-right:26px;white-space:nowrap}
+.ugrv-card td:nth-child(3){padding-left:26px;white-space:nowrap}
+.ugrv-card .act{opacity:0.7}
+.ugrv-card kbd{display:inline-block;padding:1px 7px;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:rgba(255,255,255,0.1);font:11px/1.7 system-ui,sans-serif}
 </style>
 </head>
 <body>
-<div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div></div>
+<div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
+<button class="ugrv-help">?</button>
+<div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
+<tr><td><kbd>滚轮</kbd></td><td class="act">缩放</td><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td></tr>
+<tr><td><kbd>拖拽</kbd></td><td class="act">平移</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
+<tr><td><kbd>双击</kbd></td><td class="act">复位</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">保存图片</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">光圈大小</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">复制图片</td></tr>
+</table></div></div>
+</div>
 <script>
 (function(){
 var el=document.querySelector('.ugrv'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality};
@@ -556,9 +576,15 @@ function copy(){
   var c=composite();if(!c)return;
   c.toBlob(function(blob){navigator.clipboard.write([new ClipboardItem({'image/png':blob})])});
 }
+var helpMask=el.querySelector('.ugrv-help-mask');
+function toggleHelp(){helpMask.classList.toggle('ugrv-on')}
+el.querySelector('.ugrv-help').addEventListener('click',toggleHelp);
+helpMask.addEventListener('click',toggleHelp);
 addEventListener('keydown',function(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();download();return}
   if((e.ctrlKey||e.metaKey)&&e.key==='c'){e.preventDefault();copy();return}
+  if(e.key==='?'){toggleHelp();return}
+  if(e.key==='Escape'&&helpMask.classList.contains('ugrv-on')){toggleHelp();return}
   if(e.key>='1'&&e.key<='4'){setMode(['torch','brush','spotlight','lens'][e.key-1]);return}
   if(e.key==='['||e.key===',')setSize(-10);
   if(e.key===']'||e.key==='.')setSize(10);
