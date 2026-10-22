@@ -174,8 +174,10 @@ function navHover(d) {
 function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.key === 'ArrowLeft') navGroup(-1);
-  if (e.key === 'ArrowRight') navGroup(1);
+  // 只有一组时,←/→ 退化为切换组内产出
+  const single = groups.value.length < 2;
+  if (e.key === 'ArrowLeft') single ? navHover(-1) : navGroup(-1);
+  if (e.key === 'ArrowRight') single ? navHover(1) : navGroup(1);
   if (e.key === 'ArrowUp') navHover(-1);
   if (e.key === 'ArrowDown') navHover(1);
 }
