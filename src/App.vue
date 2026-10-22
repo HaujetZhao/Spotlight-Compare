@@ -53,11 +53,11 @@ async function pick(key) {
 // ===== 文件夹批対 =====
 const dirHandle = ref(null);
 
-// 文件名主干:去扩展名、消掉批量重命名的系统尾缀"(数字)"与末尾空格
+// 文件名主干:去扩展名、去掉任意位置的括号及其内容(备注/批量重命名序号)、末尾空格
 function stemOf(name) {
   const dot = name.lastIndexOf('.');
   const stem = dot > 0 ? name.slice(0, dot) : name;
-  return stem.replace(/\s*\(\d+\)\s*$/, '').trimEnd();
+  return stem.replace(/\s*\([^)]*\)/g, '').trimEnd();
 }
 
 // 按标记分角色分组:带原图标记=原图(每根至多一张),不带=产出;同根全部产出归一组
