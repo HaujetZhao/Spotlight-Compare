@@ -36,7 +36,7 @@ async function pick(key) {
   });
   const url = URL.createObjectURL(await handle.getFile());
   if (!group.value) {
-    groups.value = [{ base: '', hovers: [''] }];
+    groups.value = [{ base: '', hovers: [''], baseName: '', hoverNames: [''] }];
     gIdx.value = 0;
     hIdx.value = 0;
   }
@@ -44,12 +44,14 @@ async function pick(key) {
     if (group.value.base)
       URL.revokeObjectURL(group.value.base);
     group.value.base = url;
+    group.value.baseName = handle.name;
   }
   else {
     const old = group.value.hovers[hIdx.value];
     if (old)
       URL.revokeObjectURL(old);
     group.value.hovers[hIdx.value] = url;
+    group.value.hoverNames[hIdx.value] = handle.name;
   }
 }
 
@@ -97,6 +99,8 @@ async function scanDir(dir) {
     list.push({
       base: URL.createObjectURL(await dir.getFileHandle(baseName).then(h => h.getFile())),
       hovers: await Promise.all(hoverNames.sort().map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL))),
+      baseName,
+      hoverNames: [...hoverNames].sort(), // 与 hovers 一一对应,导出时取作文件名
     });
   }
   groups.value.forEach(revokeGroup);
@@ -189,6 +193,11 @@ function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
     e.preventDefault();
     copyComposite();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    downloadComposite();
     return;
   }
   // 只有一组时,←/→ 退化为切换组内产出
@@ -325,15 +334,16 @@ function maskStops() {
   return [[0, '#000'], [0.72, '#000'], [0.78, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']];
 }
 
-// Ctrl+C:把当前叠加效果(底图 + 光圈内透出的 hover 图)合成后写入剪贴板。
-// 方案 A:以原图分辨率为画布导出整张图,缩放/平移只是观察手段不参与合成;
+// 合成当前叠加效果(底图 + 光圈内透出的 hover 图)到原图分辨率画布。
+// 方案 A:缩放/平移只是观察手段不参与合成,输出整张图;
 // 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
-async function copyComposite() {
+// 未 hover 时即纯原图。图片未就绪返回 null。
+function compositeCanvas() {
   const el = viewer.value;
   const imgA = el?.querySelector('.ugrv-a');
   const imgB = el?.querySelector('.ugrv-b');
   if (!imgA || !imgB || !imgA.naturalWidth || !imgB.naturalWidth)
-    return;
+    return null;
   const w = el.clientWidth;
   const h = el.clientHeight;
   // object-fit: contain 的实际绘制矩形(stage 局部空间)
@@ -367,8 +377,37 @@ async function copyComposite() {
     t.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(temp, 0, 0);
   }
+  return canvas;
+}
+
+// Ctrl+C:合成结果写入剪贴板(PNG,浏览器剪贴板只保证这一种)
+async function copyComposite() {
+  const canvas = compositeCanvas();
+  if (!canvas)
+    return;
   const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+}
+
+// Ctrl+S:按面板选的格式/质量下载到默认下载文件夹(JPEG 无 alpha,垫白底)
+async function downloadComposite() {
+  const canvas = compositeCanvas();
+  if (!canvas)
+    return;
+  const fmt = settings.exportFormat;
+  if (fmt === 'jpeg') {
+    const ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  const blob = await new Promise(r => canvas.toBlob(r, `image/${fmt}`, settings.exportQuality));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
+  a.download = `${name}.${fmt}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // 放大镜圆环:遮罩坐标在 stage 局部空间,圆环挂在外层不吃 transform,

@@ -117,6 +117,25 @@ onBeforeUnmount(() => {
           <label>原图标记</label>
           <input v-model="settings.matchStr" class="text-input" type="text" placeholder="如 _原">
         </div>
+
+        <div class="separator" />
+
+        <div class="item">
+          <label>导出格式</label>
+          <div class="seg-group">
+            <button class="seg-btn" :class="{ active: settings.exportFormat === 'jpeg' }" @click="settings.exportFormat = 'jpeg'">
+              JPEG
+            </button>
+            <button class="seg-btn" :class="{ active: settings.exportFormat === 'webp' }" @click="settings.exportFormat = 'webp'">
+              WebP
+            </button>
+          </div>
+        </div>
+        <div class="item">
+          <label>导出质量</label>
+          <input v-model.number="settings.exportQuality" type="range" min="0.3" max="1" step="0.05">
+          <span>{{ Math.round(settings.exportQuality * 100) }}%</span>
+        </div>
       </div>
     </div>
   </Teleport>
