@@ -4,6 +4,7 @@
 // 换底图/换对比图按钮、lens 圆环。
 // transform-origin 固定 0 0,光圈坐标按 (屏幕-平移)/缩放 折算回局部空间。
 // 与 App 保持的行为同步清单见 CLAUDE.md 约定 4。
+import { canvasStops, maskCSS } from './mask';
 import { settings } from './settings';
 
 function blobToDataURL(blob) {
@@ -36,19 +37,11 @@ async function toDataURL(url, name) {
   return blobToDataURL(blob);
 }
 
-// 初始遮罩渐变与 App 内四种模式的 CSS 一致,当前柔和度/模式烘焙进导出文件
-function exportMask() {
-  const s = settings.softness;
-  if (settings.mode === 'brush')
-    return `radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 40%, rgba(0,0,0,.6) ${s}%, transparent 100%)`;
-  if (settings.mode === 'spotlight' || settings.mode === 'lens')
-    return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 72%, transparent 78%)';
-  return `radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 16%, rgba(0,0,0,.55) ${s}%, transparent 100%)`;
-}
-
+// 初始遮罩渐变与导出页 stops 表都从 mask.js 派生,柔和度/模式在导出时烘焙
 export async function exportPlayer({ urlA, urlB, nameA, nameB, name }) {
   const [a, b] = await Promise.all([toDataURL(urlA, nameA), toDataURL(urlB, nameB)]);
-  const mask = exportMask();
+  const mask = maskCSS(settings.mode, `${settings.softness}%`);
+  const stops = JSON.stringify(Object.fromEntries(['torch', 'brush', 'spotlight', 'lens'].map(m => [m, canvasStops(m, settings.softness)])));
   const cursor = settings.mode === 'lens' ? 'none' : 'crosshair';
   const html = `<!doctype html>
 <html lang="zh">
@@ -100,8 +93,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <script>
 (function(){
 var el=document.querySelector('.ugrv'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality};
-var S=${settings.softness},stops={torch:[[0,'#000'],[0.16,'#000'],[S/100,'rgba(0,0,0,0.55)'],[1,'rgba(0,0,0,0)']],brush:[[0,'#000'],[0.4,'#000'],[S/100,'rgba(0,0,0,0.6)'],[1,'rgba(0,0,0,0)']],spotlight:[[0,'#000'],[0.72,'#000'],[0.78,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,0)']]};
-stops.lens=stops.spotlight;
+var stops=${stops};
 function css(st){return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y),'+st.map(function(p){return p[1]+' '+Math.round(p[0]*100)+'%'}).join(',')+')'}
 var ring=el.querySelector('.ugrv-ring');
 function ringVis(){var on=mode==='lens';ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}

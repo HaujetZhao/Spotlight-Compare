@@ -4,6 +4,7 @@
 // 目录句柄存 IndexedDB,刷新后可一键恢复(浏览器要求重新授权必须有一次用户点击)。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { exportPlayer } from './exportPlayer';
+import { canvasStops, maskCSS } from './mask';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
@@ -350,15 +351,6 @@ function onDblClick() {
   applyTransform();
 }
 
-// 各模式光圈的渐变站点(与 CSS 遮罩一致;torch/brush 的柔和度实时读)
-function maskStops() {
-  if (settings.mode === 'torch')
-    return [[0, '#000'], [0.16, '#000'], [settings.softness / 100, 'rgba(0,0,0,0.55)'], [1, 'rgba(0,0,0,0)']];
-  if (settings.mode === 'brush')
-    return [[0, '#000'], [0.4, '#000'], [settings.softness / 100, 'rgba(0,0,0,0.6)'], [1, 'rgba(0,0,0,0)']];
-  return [[0, '#000'], [0.72, '#000'], [0.78, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']];
-}
-
 // 合成当前叠加效果(底图 + 光圈内透出的 hover 图)到原图分辨率画布。
 // 方案 A:缩放/平移只是观察手段不参与合成,输出整张图;
 // 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
@@ -397,7 +389,7 @@ function compositeCanvas() {
     const mx = (x.value - ra[0]) * fitK;
     const my = (y.value - ra[1]) * fitK;
     const g = t.createRadialGradient(mx, my, 0, mx, my, settings.size * fitK);
-    maskStops().forEach(([o, c]) => g.addColorStop(o, c));
+    canvasStops(settings.mode, settings.softness).forEach(([o, c]) => g.addColorStop(o, c));
     t.fillStyle = g;
     t.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(temp, 0, 0);
@@ -480,7 +472,7 @@ onBeforeUnmount(() => {
   <div v-if="pair" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onUp" @wheel.prevent="onWheel" @mousedown="onDown" @dblclick="onDblClick" @dragstart.prevent>
     <div ref="stage" class="stage">
       <img class="ugrv-a" :src="pair.base" alt="底图">
-      <img class="ugrv-b" :src="pair.hover" alt="对比图">
+      <img class="ugrv-b" :src="pair.hover" alt="对比图" :style="{ webkitMaskImage: maskCSS(settings.mode), maskImage: maskCSS(settings.mode) }">
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
     <div class="toolbar">
@@ -605,20 +597,6 @@ body {
   opacity: 1;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
-}
-/* 四种模式的光圈形状(跟随延迟均为 0):torch/brush 三站羽化,softness 管中点;spotlight/lens 两站硬边 */
-.ugrv-m-torch .ugrv-b {
-  -webkit-mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 16%, rgba(0, 0, 0, 0.55) var(--ugrv-soft), transparent 100%);
-  mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 16%, rgba(0, 0, 0, 0.55) var(--ugrv-soft), transparent 100%);
-}
-.ugrv-m-brush .ugrv-b {
-  -webkit-mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 40%, rgba(0, 0, 0, 0.6) var(--ugrv-soft), transparent 100%);
-  mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 40%, rgba(0, 0, 0, 0.6) var(--ugrv-soft), transparent 100%);
-}
-.ugrv-m-spotlight .ugrv-b,
-.ugrv-m-lens .ugrv-b {
-  -webkit-mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 72%, transparent 78%);
-  mask-image: radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y), #000 72%, transparent 78%);
 }
 /* 放大镜:藏光标,用可见圆环代替 */
 .ugrv-m-lens {
