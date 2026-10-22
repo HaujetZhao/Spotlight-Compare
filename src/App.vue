@@ -51,48 +51,67 @@ function waitLoaded(v) {
     ? Promise.resolve()
     : new Promise(r => ['loadeddata', 'error'].forEach(t => v.addEventListener(t, r, { once: true })));
 }
-// 底图按角色(.ugrv-a,含拼接视频包裹层)找,不能依赖 DOM 顺序:Tab 互换后顺序不变、角色会换
-function baseOf(vs) {
-  return vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
+// 时间基准取"出声的那一路"(按角色找,不依赖 DOM 顺序):音频必须连续,
+// 播放中绝不能为了对齐去 seek 它——seek 一打断音频管线就掉帧,而且 seek 落地时
+// 对方已经又跑开一截,于是每帧再 seek,变成死循环,表现就是出声那路卡、声音也卡。
+// 拼接视频的对比半边恒静音,主时钟永远在底图那一路。
+function clockOf(vs) {
+  const role = hoverAudio.value && !pair.value?.stitched ? '.ugrv-b' : '.ugrv-a';
+  return vs.find(v => v.closest(role)) ?? vs[0];
 }
-// 把对比路的时间戳对齐到底图(暂停、起播都要一次;两路是各走各的时钟)
+// 暂停 / 起播前一次性对齐(这时 seek 不打断播放)
 function syncSlaves() {
   const vs = frontVideos();
-  const base = baseOf(vs);
-  if (!base)
+  const master = clockOf(vs);
+  if (!master)
     return;
   vs.forEach((v) => {
-    if (v !== base && Math.abs(v.currentTime - base.currentTime) > 0.001)
-      v.currentTime = base.currentTime;
+    v.playbackRate = 1;
+    if (v !== master && Math.abs(v.currentTime - master.currentTime) > 0.001)
+      v.currentTime = master.currentTime;
   });
 }
-// 播放中每帧对一次:两路起播早晚不同会留下固定偏差,超过一帧就拉回底图的位置
+// 播放中不 seek,只给落后那一路微调速率去追(±5%,看不出速度差,也绝不打断声音);
+// 差出一大截才硬对齐——而且只对齐静音那一路
+const SYNC_HARD = 0.3;
 let syncRaf = 0;
 function startSync() {
   cancelAnimationFrame(syncRaf);
   const step = () => {
     const vs = frontVideos();
-    const base = baseOf(vs);
-    if (!base || base.paused)
+    const master = clockOf(vs);
+    if (!master || master.paused)
       return; // 停了就收手,下次 playAll 再开
+    // Tab / M 换过角色后,旧的纠偏速率不许留在主时钟上
+    if (master.playbackRate !== 1)
+      master.playbackRate = 1;
+    const t = master.currentTime;
     vs.forEach((v) => {
-      if (v !== base && Math.abs(v.currentTime - base.currentTime) > 0.05)
-        v.currentTime = base.currentTime;
+      if (v === master)
+        return;
+      const e = t - v.currentTime;
+      if (Math.abs(e) > SYNC_HARD) {
+        v.playbackRate = 1;
+        v.currentTime = t;
+      }
+      else {
+        v.playbackRate = Math.abs(e) > 0.02 ? 1 + Math.max(-0.05, Math.min(0.05, e * 0.5)) : 1;
+      }
     });
     syncRaf = requestAnimationFrame(step);
   };
   syncRaf = requestAnimationFrame(step);
 }
-// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格
+// 先起出声那一路(可能被自动播放策略拦),被拦就两路都不动,等空格
 function playAll() {
   const vs = frontVideos();
-  const base = baseOf(vs);
-  if (!base)
+  const master = clockOf(vs);
+  if (!master)
     return;
   syncSlaves();
   // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve)
-  const started = base.play();
-  vs.filter(v => v !== base).forEach(v => v.play().catch(() => {}));
+  const started = master.play();
+  vs.filter(v => v !== master).forEach(v => v.play().catch(() => {}));
   started?.catch(() => vs.forEach(v => v.pause()));
   startSync();
 }
