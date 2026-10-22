@@ -136,7 +136,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="item">
-          <label>拼接视频原视频</label>
+          <label>拼接原视频</label>
           <div class="seg-group">
             <button class="seg-btn" :class="{ active: settings.stitchVideoSide === 'left' }" @click="settings.stitchVideoSide = 'left'">
               左边
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 .panel-header {
-  padding: 12px 15px;
+  padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   font-size: 15px;
   font-weight: 700;
