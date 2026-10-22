@@ -80,9 +80,9 @@ defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'openFolder']);
   gap: 6px;
 }
 /* 与导出页按钮同一套样式;等宽让竖排不参差 */
+/* 四个都是三字,按内容定宽就自然等宽,不必写死 */
 .acts button {
-  width: 88px;
-  padding: 5px 0;
+  padding: 5px 14px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;
   background: rgba(30, 40, 66, 0.8);
