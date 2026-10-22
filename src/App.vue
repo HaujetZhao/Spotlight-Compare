@@ -210,6 +210,14 @@ function onKey(e) {
     navHover(-1);
   if (e.key === 'ArrowRight')
     navHover(1);
+  if (e.key === ' ') {
+    e.preventDefault();
+    navGroup(1);
+  }
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    navGroup(-1);
+  }
 }
 
 // ===== 光圈/缩放/平移 =====
