@@ -65,6 +65,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 .ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
 .ugrv-btn:hover{background:rgba(52,64,100,0.9)}
 .ugrv-btn[data-pick='b']{top:44px}
+.ugrv-btn[data-pick='s']{top:76px}
 .ugrv-help-mask{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}
 .ugrv-help-mask.ugrv-on{display:flex}
 .ugrv-card{min-width:340px;padding:20px 26px;border:1px solid rgba(255,255,255,0.14);border-radius:14px;background:rgba(16,22,40,0.92);color:#fff}
@@ -83,6 +84,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <button class="ugrv-help">?</button>
 <button class="ugrv-btn" data-pick="a">换底图</button>
 <button class="ugrv-btn" data-pick="b">换对比图</button>
+<button class="ugrv-btn" data-pick="s">换拼接图</button>
 <div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
 <tr><td><kbd>滚轮</kbd></td><td class="act">缩放</td><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td></tr>
 <tr><td><kbd>拖拽</kbd></td><td class="act">平移</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
@@ -93,7 +95,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 </div>
 <script>
 (function(){
-var el=document.querySelector('.ugrv'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality};
+var el=document.querySelector('.ugrv'),ai=el.querySelector('.ugrv-a'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=false,size=${settings.size},s=1,tx=0,ty=0,pan=false,px=0,py=0,mode='${settings.mode}',fmt='${settings.exportFormat}',quality=${settings.exportQuality};
 var stops=${stops};
 function css(st){return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y),'+st.map(function(p){return p[1]+' '+Math.round(p[0]*100)+'%'}).join(',')+')'}
 var ring=el.querySelector('.ugrv-ring');
@@ -153,12 +155,29 @@ function copy(){
 var helpMask=el.querySelector('.ugrv-help-mask');
 function toggleHelp(){helpMask.classList.toggle('ugrv-on')}
 el.querySelector('.ugrv-help').addEventListener('click',toggleHelp);
-// 换底图/换对比图:原生文件选择,选中后 objectURL 直接换 img.src
+// 换底图/换对比图/换拼接图:原生文件选择;拼接图在页内拆成等宽两半(PNG 无损)直接换两张 src
 var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
 var pickTarget=null;
-fi.addEventListener('change',function(){if(fi.files[0]){pickTarget.src=URL.createObjectURL(fi.files[0])}fi.value=''});
+fi.addEventListener('change',function(){
+  var f=fi.files[0];fi.value='';
+  if(!f)return;
+  if(pickTarget==='s'){
+    var img=new Image();
+    img.onload=function(){
+      var half=Math.floor(img.naturalWidth/2);
+      [ai,bi].forEach(function(im,i){
+        var c=document.createElement('canvas');c.width=half;c.height=img.naturalHeight;
+        c.getContext('2d').drawImage(img,i*half,0,half,img.naturalHeight,0,0,half,img.naturalHeight);
+        im.src=c.toDataURL('image/png');
+      });
+    };
+    img.src=URL.createObjectURL(f);
+    return;
+  }
+  el.querySelector('.ugrv-'+pickTarget).src=URL.createObjectURL(f);
+});
 el.querySelectorAll('.ugrv-btn[data-pick]').forEach(function(b){
-  b.addEventListener('click',function(){pickTarget=el.querySelector('.ugrv-'+b.dataset.pick);fi.click()});
+  b.addEventListener('click',function(){pickTarget=b.dataset.pick;fi.click()});
 });
 helpMask.addEventListener('click',toggleHelp);
 addEventListener('keydown',function(e){
@@ -166,7 +185,7 @@ addEventListener('keydown',function(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='c'){e.preventDefault();copy();return}
   if(e.key==='?'){toggleHelp();return}
   if(e.key==='Escape'&&helpMask.classList.contains('ugrv-on')){toggleHelp();return}
-  if(e.key==='Tab'){e.preventDefault();var ai=el.querySelector('.ugrv-a'),t=ai.src;ai.src=bi.src;bi.src=t;return}
+  if(e.key==='Tab'){e.preventDefault();var t=ai.src;ai.src=bi.src;bi.src=t;return}
   if(e.key>='1'&&e.key<='4'){setMode(['torch','brush','spotlight','lens'][e.key-1]);return}
   if(e.key==='['||e.key===',')setSize(-10);
   if(e.key===']'||e.key==='.')setSize(10);

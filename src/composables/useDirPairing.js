@@ -40,6 +40,22 @@ function pairUp(names) {
   return [...byRoot.values()].filter(s => s.baseName && s.hoverNames.length).sort((a, b) => a.baseName.localeCompare(b.baseName));
 }
 
+// 拼接图拆半:裁成等宽 floor(w/2) 保证左右 1:1 对应(奇数宽丢最右一列),PNG 无损编码
+async function cutHalves(file) {
+  const bmp = await createImageBitmap(file);
+  const half = Math.floor(bmp.width / 2);
+  const cut = async (sx) => {
+    const c = document.createElement('canvas');
+    c.width = half;
+    c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, sx, 0, half, bmp.height, 0, 0, half, bmp.height);
+    return URL.createObjectURL(await new Promise(r => c.toBlob(r, 'image/png')));
+  };
+  const [left, right] = await Promise.all([cut(0), cut(half)]);
+  bmp.close();
+  return { left, right };
+}
+
 // --- 最小 IndexedDB 存取(只存目录句柄) ---
 function idb() {
   return new Promise((res, rej) => {
@@ -110,26 +126,15 @@ export function useDirPairing() {
   }
 
   // ===== 拼接图:单张左右拼接图裁成两半,当作普通一对走全流程 =====
-  // 两半都裁成 floor(w/2) 宽保证 1:1 对应(奇数宽丢最右一列);PNG 编码无损
   async function pickStitched() {
     const [handle] = await window.showOpenFilePicker({
       types: [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }],
     });
-    const bmp = await createImageBitmap(await handle.getFile());
-    const half = Math.floor(bmp.width / 2);
-    const cut = async (sx) => {
-      const c = document.createElement('canvas');
-      c.width = half;
-      c.height = bmp.height;
-      c.getContext('2d').drawImage(bmp, sx, 0, half, bmp.height, 0, 0, half, bmp.height);
-      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
-      return URL.createObjectURL(blob);
-    };
-    const [left, right] = await Promise.all([cut(0), cut(half)]);
-    bmp.close();
+    const { left, right } = await cutHalves(await handle.getFile());
     groups.value.forEach(revokeGroup);
     const stem = stemOf(handle.name);
-    groups.value = [{ base: left, hovers: [right], baseName: `${stem}(左).png`, hoverNames: [`${stem}(右).png`] }];
+    const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
+    groups.value = [{ base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] }];
     gIdx.value = 0;
     hIdx.value = 0;
   }
@@ -150,8 +155,22 @@ export function useDirPairing() {
       if (handle.kind === 'file')
         names.push(name);
     }
+    // 带拼接图标记的单文件各自成组(拆成两半当一对),其余走标记配对
+    const sp = settings.stitchPrefix;
+    const stitchNames = [];
+    const plainNames = [];
+    for (const name of names) {
+      if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
+        continue;
+      (sp && stemOf(name).startsWith(sp) ? stitchNames : plainNames).push(name);
+    }
     const list = [];
-    for (const { baseName, hoverNames } of pairUp(names)) {
+    for (const name of stitchNames) {
+      const { left, right } = await cutHalves(await dir.getFileHandle(name).then(h => h.getFile()));
+      const root = stemOf(name).slice(sp.length);
+      list.push({ base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] });
+    }
+    for (const { baseName, hoverNames } of pairUp(plainNames)) {
       list.push({
         base: URL.createObjectURL(await dir.getFileHandle(baseName).then(h => h.getFile())),
         hovers: await Promise.all(hoverNames.sort().map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL))),
@@ -159,6 +178,7 @@ export function useDirPairing() {
         hoverNames: [...hoverNames].sort(), // 与 hovers 一一对应,导出时取作文件名
       });
     }
+    list.sort((a, b) => a.baseName.localeCompare(b.baseName));
     groups.value.forEach(revokeGroup);
     groups.value = list;
     gIdx.value = 0;
@@ -195,7 +215,7 @@ export function useDirPairing() {
 
   // 标记设置变了自动重扫(输入防抖)
   let rescanTimer = null;
-  watch(() => [settings.matchMode, settings.matchStr], () => {
+  watch(() => [settings.matchMode, settings.matchStr, settings.stitchPrefix], () => {
     if (!dirHandle.value)
       return;
     clearTimeout(rescanTimer);
