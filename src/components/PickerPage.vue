@@ -9,17 +9,17 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
     <h1>图片 / 视频对比查看</h1>
     <p>选底图和对比,鼠标悬停处用手电筒光圈透出对比画面;图片、视频都行。</p>
     <p class="hint">
-      或打开文件夹批量对比:原图带标记(默认后缀 "_原"),不带标记的自动作为它的 hover 图。
+      或打开文件夹批量对比:带 "原-"(前缀,可改)的是原图,同名的其余文件作对比图;带 "拼-" 的自动拆两半。
     </p>
     <button v-if="needRestore" class="restore" @click="$emit('grantRestore')">
       恢复上次的文件夹
     </button>
     <p v-if="noMatch" class="warn">
-      这个文件夹里没有配到对:确认设置里的"原图标记"与文件名前缀一致(默认 原-),且每张原图至少有一张不带标记的产出。
+      没配到对:确认设置的"标记位置"和"原图标记"与文件名一致(默认前缀 原-),且每张原图都有不带标记的对比图。
     </p>
     <!-- 图与视频走同一套槽:没有配好一对之前,选中的文件类型决定这对是图还是视频 -->
     <div class="slots">
-      <button class="slot big" title="按原图标记批量配对文件夹里的图片" @click="$emit('openFolder')">
+      <button class="slot big" title="按原图标记批量配对文件夹里的图片和视频" @click="$emit('openFolder')">
         <span>打开文件夹</span>
       </button>
       <button class="slot" @click="$emit('pick', 'base')">

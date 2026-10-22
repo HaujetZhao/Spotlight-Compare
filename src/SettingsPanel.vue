@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="item">
           <label>原图标记</label>
-          <input v-model="settings.matchStr" class="text-input" type="text" placeholder="如 _原">
+          <input v-model="settings.matchStr" class="text-input" type="text" placeholder="如 原-">
         </div>
         <div class="item">
           <label>拼接图标记</label>
