@@ -70,8 +70,8 @@ export async function convertComposite({
   const tctx = temp.getContext('2d');
   const mask = new OffscreenCanvas(w, h);
   const mctx = mask.getContext('2d');
-  // 码率按 0.15 bit/px/frame:4K30≈37Mbps,1080p30≈9Mbps,画质优先
-  const videoSource = new VideoSampleSource({ codec, bitrate: Math.round(w * h * fps * 0.15), keyFrameInterval: 2 });
+  // 码率按 0.45 bit/px/frame:4K30≈111Mbps,1080p30≈27Mbps,画质优先(0.3 时细节仍不够)
+  const videoSource = new VideoSampleSource({ codec, bitrate: Math.round(w * h * fps * 0.45), keyFrameInterval: 2 });
 
   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
   output.addVideoTrack(videoSource, { frameRate: fps });
