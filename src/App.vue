@@ -378,8 +378,9 @@ function drawMedia(ctx, el, dx, dy, dw, dh) {
 // 方案 A:缩放/平移只是观察手段不参与合成,输出整张图;
 // 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
 // 未 hover 且无钉时即纯原图。zones 为 stage 局部坐标光圈;媒体未就绪返回 null。
-// 截帧(Ctrl+C/S)与视频录制共用。
-function compositeInto(canvas, zones) {
+// 截帧(Ctrl+C/S)与视频录制共用。录制逐帧调用时传入 scratch 复用临时画布:
+// 4K 下每帧新建三张全尺寸画布会被分配/GC 压垮(表现:录制中原视频卡住),复用后只剩绘制开销。
+function compositeInto(canvas, zones, scratch = {}) {
   const el = viewer.value;
   const mediaA = el?.querySelector('.layer.front .ugrv-a');
   const mediaB = el?.querySelector('.layer.front .ugrv-b');
@@ -389,22 +390,33 @@ function compositeInto(canvas, zones) {
     return null;
   const ra = fitRectOf(mediaA);
   const fitK = sa.w / ra[2];
-  canvas.width = sa.w;
-  canvas.height = sa.h;
+  if (canvas.width !== sa.w || canvas.height !== sa.h) {
+    canvas.width = sa.w;
+    canvas.height = sa.h;
+  }
   const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawMedia(ctx, mediaA, 0, 0, sa.w, sa.h);
   if (zones.length) {
     // hover 图画到临时画布;各透明区先画到蒙版画布(source-over 叠加 = 并集),
     // 再一次 destination-in 抠出,叠回底图
     const rb = fitRectOf(mediaB);
-    const temp = document.createElement('canvas');
-    temp.width = canvas.width;
-    temp.height = canvas.height;
+    if (!scratch.temp || !scratch.mask) {
+      scratch.temp = document.createElement('canvas');
+      scratch.mask = document.createElement('canvas');
+    }
+    const temp = scratch.temp;
+    const mask = scratch.mask;
+    if (temp.width !== canvas.width || temp.height !== canvas.height) {
+      temp.width = canvas.width;
+      temp.height = canvas.height;
+      mask.width = canvas.width;
+      mask.height = canvas.height;
+    }
     const t = temp.getContext('2d');
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, temp.width, temp.height); // hover 矩形未必铺满画布,先清掉上一帧残迹
     drawMedia(t, mediaB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
-    const mask = document.createElement('canvas');
-    mask.width = canvas.width;
-    mask.height = canvas.height;
     const mc = mask.getContext('2d');
     for (const z of zones) {
       const mx = (z.x - ra[0]) * fitK;
@@ -466,7 +478,8 @@ function recordVideo() {
     return;
   const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
   const canvas = document.createElement('canvas');
-  if (!compositeInto(canvas, zones))
+  const scratch = {};
+  if (!compositeInto(canvas, zones, scratch))
     return; // 先画一帧:定下画布尺寸、确认媒体就绪
   recorder = startRecording(canvas, frontVideos().find(v => !v.muted));
   syncSlaves();
@@ -482,7 +495,7 @@ function recordVideo() {
     const vs = frontVideos();
     if (vs.every(v => v.paused))
       return finishRecording(true); // 空格暂停即停录保存
-    compositeInto(canvas, zones);
+    compositeInto(canvas, zones, scratch);
     recording.value.pct = Math.min(1, vs[0].currentTime / dur);
     requestAnimationFrame(draw);
   };
