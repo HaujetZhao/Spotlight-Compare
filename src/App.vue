@@ -497,6 +497,9 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 .ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
 .ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;width:30px;height:30px;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
 .ugrv-help:hover{background:rgba(52,64,100,0.9)}
+.ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-btn:hover{background:rgba(52,64,100,0.9)}
+.ugrv-btn[data-pick='b']{top:44px}
 .ugrv-help-mask{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}
 .ugrv-help-mask.ugrv-on{display:flex}
 .ugrv-card{min-width:340px;padding:20px 26px;border:1px solid rgba(255,255,255,0.14);border-radius:14px;background:rgba(16,22,40,0.92);color:#fff}
@@ -512,6 +515,8 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <body>
 <div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
 <button class="ugrv-help">?</button>
+<button class="ugrv-btn" data-pick="a">换底图</button>
+<button class="ugrv-btn" data-pick="b">换对比图</button>
 <div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
 <tr><td><kbd>滚轮</kbd></td><td class="act">缩放</td><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td></tr>
 <tr><td><kbd>拖拽</kbd></td><td class="act">平移</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
@@ -579,6 +584,13 @@ function copy(){
 var helpMask=el.querySelector('.ugrv-help-mask');
 function toggleHelp(){helpMask.classList.toggle('ugrv-on')}
 el.querySelector('.ugrv-help').addEventListener('click',toggleHelp);
+// 换底图/换对比图:原生文件选择,选中后 objectURL 直接换 img.src
+var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
+var pickTarget=null;
+fi.addEventListener('change',function(){if(fi.files[0]){pickTarget.src=URL.createObjectURL(fi.files[0])}fi.value=''});
+el.querySelectorAll('.ugrv-btn[data-pick]').forEach(function(b){
+  b.addEventListener('click',function(){pickTarget=el.querySelector('.ugrv-'+b.dataset.pick);fi.click()});
+});
 helpMask.addEventListener('click',toggleHelp);
 addEventListener('keydown',function(e){
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();download();return}
@@ -635,8 +647,6 @@ onBeforeUnmount(() => {
       <img class="ugrv-a" :src="pair.base" alt="底图">
       <img class="ugrv-b" :src="pair.hover" alt="对比图">
     </div>
-    <span class="ugrv-lab ugrv-lab-a">底图</span>
-    <span class="ugrv-lab ugrv-lab-b">对比图</span>
     <div class="ugrv-ring" :style="ringStyle" />
     <div class="toolbar">
       <button v-if="groups.length > 1" @click.stop="navGroup(-1)">
@@ -791,36 +801,7 @@ body {
 .ugrv-m-lens.ugrv-in .ugrv-ring {
   opacity: 1;
 }
-.ugrv-lab {
-  position: absolute;
-  left: 50%;
-  inset: auto auto 12px;
-  transform: translateX(-50%);
-  z-index: 4;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font: 700 12px system-ui, sans-serif;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #ffffff;
-  background: rgba(0, 0, 0, 0.42);
-  pointer-events: none;
-}
-.ugrv-lab-b {
-  opacity: 0;
-}
-.ugrv:hover .ugrv-lab-a,
-.ugrv.ugrv-in .ugrv-lab-a {
-  opacity: 0;
-}
-.ugrv:hover .ugrv-lab-b,
-.ugrv.ugrv-in .ugrv-lab-b {
-  opacity: 1;
-}
 @media (hover: none) {
-  .ugrv .ugrv-lab {
-    opacity: 1;
-  }
   .ugrv {
     cursor: pointer;
   }
