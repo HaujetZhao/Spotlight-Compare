@@ -186,6 +186,11 @@ function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA')
     return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    e.preventDefault();
+    copyComposite();
+    return;
+  }
   // 只有一组时,←/→ 退化为切换组内产出
   const single = groups.value.length < 2;
   if (e.key === 'ArrowLeft')
@@ -309,6 +314,66 @@ function onDblClick() {
   pointX.value = 0;
   pointY.value = 0;
   applyTransform();
+}
+
+// 各模式光圈的渐变站点(与 CSS 遮罩一致;torch/brush 的柔和度实时读)
+function maskStops() {
+  if (settings.mode === 'torch')
+    return [[0, '#000'], [0.16, '#000'], [settings.softness / 100, 'rgba(0,0,0,0.55)'], [1, 'rgba(0,0,0,0)']];
+  if (settings.mode === 'brush')
+    return [[0, '#000'], [0.4, '#000'], [settings.softness / 100, 'rgba(0,0,0,0.6)'], [1, 'rgba(0,0,0,0)']];
+  return [[0, '#000'], [0.72, '#000'], [0.78, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']];
+}
+
+// Ctrl+C:把当前叠加效果(底图 + 光圈内透出的 hover 图)合成后写入剪贴板
+async function copyComposite() {
+  const el = viewer.value;
+  const imgA = el?.querySelector('.ugrv-a');
+  const imgB = el?.querySelector('.ugrv-b');
+  if (!imgA || !imgB || !imgA.naturalWidth || !imgB.naturalWidth)
+    return;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  // object-fit: contain 的实际绘制矩形
+  const fitRect = (img) => {
+    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    const iw = img.naturalWidth * k;
+    const ih = img.naturalHeight * k;
+    return [(w - iw) / 2, (h - ih) / 2, iw, ih];
+  };
+  // 复现 stage 变换:屏幕 = 中心 + 平移 + (局部 - 中心) × scale
+  const cx = w / 2;
+  const cy = h / 2;
+  const stageTransform = (c) => {
+    c.translate(cx + pointX.value, cy + pointY.value);
+    c.scale(scale.value, scale.value);
+    c.translate(-cx, -cy);
+  };
+  const canvas = document.createElement('canvas');
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.drawImage(imgA, ...fitRect(imgA));
+  if (active.value) {
+    // hover 图画到临时画布,用径向渐变 destination-in 抠出光圈,再叠回
+    const temp = document.createElement('canvas');
+    temp.width = canvas.width;
+    temp.height = canvas.height;
+    const t = temp.getContext('2d');
+    t.scale(dpr, dpr);
+    t.drawImage(imgB, ...fitRect(imgB));
+    t.globalCompositeOperation = 'destination-in';
+    stageTransform(t);
+    const g = t.createRadialGradient(x.value, y.value, 0, x.value, y.value, settings.size);
+    maskStops().forEach(([o, c]) => g.addColorStop(o, c));
+    t.fillStyle = g;
+    t.fillRect(-w * 12, -h * 12, w * 25, h * 25);
+    ctx.drawImage(temp, 0, 0, w, h);
+  }
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 }
 
 // 放大镜圆环:遮罩坐标在 stage 局部空间,圆环挂在外层不吃 transform,
