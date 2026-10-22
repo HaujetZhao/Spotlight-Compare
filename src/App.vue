@@ -18,9 +18,20 @@ const viewer = ref(null);
 const stage = ref(null);
 const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
 
-// 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚;换图即清
+// 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚。
+// 钉绑定到当前一对图(与 Tab 互换共享),换走再换回来还在
 const pins = ref([]);
-watch(pair, () => (pins.value = []));
+const pinsByPair = new Map();
+watch(pair, (p) => {
+  if (!p) {
+    pins.value = [];
+    return;
+  }
+  const key = [p.base, p.hover].sort().join('|');
+  if (!pinsByPair.has(key))
+    pinsByPair.set(key, []);
+  pins.value = pinsByPair.get(key);
+});
 function pin() {
   if (!active.value)
     return;
