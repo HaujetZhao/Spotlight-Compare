@@ -503,6 +503,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 .ugrv-b{z-index:2;-webkit-mask-image:${mask};mask-image:${mask};-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .ugrv{--ugrv-r:0px}
 .ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
+.ugrv-ring{position:absolute;z-index:3;border-radius:50%;border:2px solid rgba(255,255,255,0.85);box-shadow:0 0 0 1px rgba(0,0,0,0.35),0 10px 26px rgba(0,0,0,0.4),inset 0 0 22px rgba(255,255,255,0.16);pointer-events:none;opacity:0}
 .ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;width:30px;height:30px;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
 .ugrv-help:hover{background:rgba(52,64,100,0.9)}
 .ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
@@ -522,6 +523,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 </head>
 <body>
 <div class="ugrv"><div class="stage"><img class="ugrv-a" src="${a}" alt="原图"><img class="ugrv-b" src="${b}" alt="对比图"></div>
+<div class="ugrv-ring"></div>
 <button class="ugrv-help">?</button>
 <button class="ugrv-btn" data-pick="a">换底图</button>
 <button class="ugrv-btn" data-pick="b">换对比图</button>
@@ -538,13 +540,16 @@ var el=document.querySelector('.ugrv'),bi=el.querySelector('.ugrv-b'),x=0,y=0,q=
 var S=${settings.softness},stops={torch:[[0,'#000'],[0.16,'#000'],[S/100,'rgba(0,0,0,0.55)'],[1,'rgba(0,0,0,0)']],brush:[[0,'#000'],[0.4,'#000'],[S/100,'rgba(0,0,0,0.6)'],[1,'rgba(0,0,0,0)']],spotlight:[[0,'#000'],[0.72,'#000'],[0.78,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,0)']]};
 stops.lens=stops.spotlight;
 function css(st){return 'radial-gradient(circle var(--ugrv-r) at var(--ugrv-x) var(--ugrv-y),'+st.map(function(p){return p[1]+' '+Math.round(p[0]*100)+'%'}).join(',')+')'}
-function setMode(m){mode=m;var g=css(stops[m]);bi.style.webkitMaskImage=g;bi.style.maskImage=g;el.style.cursor=m==='lens'?'none':'crosshair'}
-function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px')}
-function applyT(){el.querySelector('.stage').style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')'}
+var ring=el.querySelector('.ugrv-ring');
+function ringVis(){var on=mode==='lens';ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}
+function applyRing(){var r=size*s*0.78;ring.style.left=(tx+x*s-r)+'px';ring.style.top=(ty+y*s-r)+'px';ring.style.width=ring.style.height=r*2+'px'}
+function setMode(m){mode=m;var g=css(stops[m]);bi.style.webkitMaskImage=g;bi.style.maskImage=g;el.style.cursor=m==='lens'?'none':'crosshair';ringVis()}
+function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');applyRing()}
+function applyT(){el.querySelector('.stage').style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';applyRing()}
 function move(e){var r=el.getBoundingClientRect();x=(e.clientX-r.left-tx)/s;y=(e.clientY-r.top-ty)/s;if(!q){q=true;requestAnimationFrame(apply)}}
-function show(e){move(e);el.classList.add('ugrv-in')}
-function hide(){el.classList.remove('ugrv-in')}
-function setSize(d){size=Math.max(50,Math.min(400,size+d));el.style.setProperty('--ugrv-size',size+'px')}
+function show(e){move(e);el.classList.add('ugrv-in');ringVis()}
+function hide(){el.classList.remove('ugrv-in');ringVis()}
+function setSize(d){size=Math.max(50,Math.min(400,size+d));el.style.setProperty('--ugrv-size',size+'px');applyRing()}
 el.addEventListener('pointerenter',show);
 el.addEventListener('pointerleave',function(){if(!pan)hide()});
 el.addEventListener('pointerdown',function(e){if(e.button!==0)return;pan=true;px=e.clientX-tx;py=e.clientY-ty;show(e)});
@@ -609,6 +614,7 @@ addEventListener('keydown',function(e){
   if(e.key==='['||e.key===',')setSize(-10);
   if(e.key===']'||e.key==='.')setSize(10);
 });
+ringVis();
 })();
 </${'script'}>
 </body>
