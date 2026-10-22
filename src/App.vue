@@ -478,7 +478,11 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
+    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" />
+    <!-- 左上角设置入口;mousedown 拦住,否则面板的"点外关闭"会先关掉、click 又打开 -->
+    <button class="ugrv-set" title="设置" @mousedown.stop @click="showSettings = !showSettings">
+      设置
+    </button>
     <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
       ?
     </button>
@@ -691,6 +695,23 @@ body {
   opacity: 1;
 }
 /* 帮助浮层(与导出页同款) */
+/* 左上角设置入口,与导出页按钮同款 */
+.ugrv-set {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 4;
+  padding: 5px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(30, 40, 66, 0.8);
+  color: #fff;
+  font: 600 12px system-ui, sans-serif;
+  cursor: pointer;
+}
+.ugrv-set:hover {
+  background: rgba(52, 64, 100, 0.9);
+}
 .ugrv-help {
   position: absolute;
   left: 12px;

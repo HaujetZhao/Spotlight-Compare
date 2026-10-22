@@ -39,7 +39,7 @@ src/
 │   └── usePanZoom.js          # 光圈跟随 + 缩放平移,lens 圆环
 └── components/
     ├── PickerPage.vue         # 选择页(打开文件夹/底图/对比/拼接 四个入口,图文通用 + 恢复按钮)
-    └── Toolbar.vue            # 查看器角落工具栏
+    └── Toolbar.vue            # 查看器右上角工具栏(竖排,与导出页同款按钮);设置入口在左上角
 index.html                     # Vite 入口
 public/icon.svg                # PWA/manifest 图标
 ```
@@ -49,7 +49,7 @@ public/icon.svg                # PWA/manifest 图标
 1. **settings 是唯一共享状态**:[settings.js](src/settings.js) 导出 reactive 单例,改动自动落 localStorage。新增预览参数只加在 `DEFAULTS`,不要另开状态源。
 2. **光圈渐变单一事实源**:[mask.js](src/mask.js) 的 `STOPS` 表(`soft` 占位符)派生出查看器 CSS 遮罩(`maskCSS()`)、canvas 合成(`canvasStops()`)与导出页(内嵌同一张表烤入),改光圈形状/羽化只动这一张表。
 3. **坐标系**:遮罩渐变与光圈坐标都在 **stage 局部空间**。stage 有 transform(缩放/平移,origin 0 0),指针坐标经 `toLocal()` 折算:`(屏幕 − 容器左上 − 平移) / 缩放`。合成导出时再经 `fitRect/fitK`(object-fit:contain 实际绘制矩形)线性映射到**原图分辨率**。缩放/平移只是观察手段,不参与合成。
-4. **导出页是自包含模板字符串**(`exportPlayer.js`):内嵌 base64 图 + 缩水版交互,与 App 保持的行为同步清单——光圈跟随、滚轮缩放(以鼠标为中心)、拖拽平移、Ctrl+滚轮调光圈、双击复位、热键(1-4 切模式 / `[ ] , .` 调光圈 / Tab 互换底图对比图 / Ctrl+S 下载 / Ctrl+C 复制 / `?` 帮助)、换底图/换对比图/换拼接图按钮(拼接图在导出页内拆半)、光圈钉(导出时经 fitRect/fitK 烤成原图分辨率坐标,按方向两份:预置方向一份、互换方向从空开始,收件人左键点/右键 增删,会话态不落盘)、lens 圆环(半径 ×0.78 对齐渐变硬边)、镜头模式出底图范围时藏镜头显鼠标(`onImg`)。改 App 交互后检查导出页是否要跟。
+4. **导出页是自包含模板字符串**(`exportPlayer.js`):内嵌 base64 图 + 缩水版交互,与 App 保持的行为同步清单——光圈跟随、滚轮缩放(以鼠标为中心)、拖拽平移、Ctrl+滚轮调光圈、双击复位、热键(1-4 切模式 / `[ ] , .` 调光圈 / Tab 互换底图对比图 / Ctrl+S 下载 / Ctrl+C 复制 / `?` 帮助)、更换底图/更换对比/更换拼接按钮(拼接图在导出页内拆半)、光圈钉(导出时经 fitRect/fitK 烤成原图分辨率坐标,按方向两份:预置方向一份、互换方向从空开始,收件人左键点/右键 增删,会话态不落盘)、lens 圆环(半径 ×0.78 对齐渐变硬边)、镜头模式出底图范围时藏镜头显鼠标(`onImg`)。改 App 交互后检查导出页是否要跟。
 5. **导出压缩**:内嵌图按扩展名分流——`jpg/jpeg/webp` 源文件原样嵌入不重编码,其余格式画布重编码(面板格式/质量,JPEG 垫白底)。
 6. **objectURL 生命周期**:配对扫描/单换图时旧 URL 必须 revoke(`revokeGroup`/`pick` 内),卸载时兜底清全量。
 7. **持久化**:[idb.js](src/idb.js) 是手写最小 IndexedDB kv(无依赖)——`handles` store 存 dir handle(不可 JSON 序列化),`pairs` store 按 `pair.key` 存每对的状态记录(`{ pins: [...], ...以后每对的其他数值 }`);刷新后浏览器要求一次用户点击重新授权(`needRestore` 流程)。
