@@ -137,7 +137,9 @@ export async function convertComposite({
       hoverPeek = undefined;
     }
     ctx.clearRect(0, 0, w, h);
-    s.draw(ctx, baseSx * s.displayWidth, 0, s.displayWidth / (half ? 2 : 1), s.displayHeight, 0, 0, w, h);
+    // 源半边偏移按半边宽算:sx 是源坐标,不是整幅宽
+    const sw = s.displayWidth / (half ? 2 : 1);
+    s.draw(ctx, baseSx * sw, 0, sw, s.displayHeight, 0, 0, w, h);
     if (hoverCur && zones.length) {
       const hw = hoverCur.displayWidth / (half ? 2 : 1);
       const hh = hoverCur.displayHeight;
@@ -148,7 +150,7 @@ export async function convertComposite({
       const rx = (w - rw) / 2;
       const ry = (h - rh) / 2;
       tctx.clearRect(0, 0, w, h);
-      hoverCur.draw(tctx, hoverSx * hoverCur.displayWidth, 0, hw, hh, rx, ry, rw, rh);
+      hoverCur.draw(tctx, hoverSx * hw, 0, hw, hh, rx, ry, rw, rh);
       mctx.clearRect(0, 0, w, h);
       for (const z of zones) {
         const g = mctx.createRadialGradient(z.mx, z.my, 0, z.mx, z.my, z.size);
@@ -161,7 +163,10 @@ export async function convertComposite({
       tctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(temp, 0, 0);
     }
-    const out = new VideoSample(canvas, { timestamp: s.timestamp, duration: s.duration });
+    // transferToImageBitmap:规范保证的原子快照。直接 new VideoSample(canvas) 内部走
+    // new VideoFrame(canvas),不等画布 GPU 队列排空,竞态下会截到上一笔绘制前的旧帧
+    // (实测症状:合成视频里光圈整段消失,只剩底图,忽现忽不现)
+    const out = new VideoSample(canvas.transferToImageBitmap(), { timestamp: s.timestamp, duration: s.duration });
     await videoSource.add(out);
     out.close();
     s.close();

@@ -505,8 +505,9 @@ async function recordVideo() {
         hoverBlob,
         audioBlob: audioUrl === p.base ? baseBlob : await fetch(audioUrl).then(r => r.blob()),
         half: p.stitched,
-        baseSx: p.swapped ? 1 : 0,
-        hoverSx: p.swapped ? 0 : 1,
+        // 源半边偏移只对拼接视频有意义(0 左 1 右);普通两路视频各是完整一帧
+        baseSx: p.stitched && p.swapped ? 1 : 0,
+        hoverSx: p.stitched && !p.swapped ? 1 : 0,
         zones,
         onProgress: pct => recording.value && (recording.value.pct = pct),
         canceled: () => !recording.value,
