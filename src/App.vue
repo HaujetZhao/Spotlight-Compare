@@ -492,95 +492,97 @@ onBeforeUnmount(() => {
       <div class="ugrv-card">
         <h3>快捷键</h3>
         <table>
-          <tr class="grp">
-            <td colspan="4">
-              切换
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>↑/↓</kbd> <kbd>退格</kbd></td><td class="act">
-              切组
-            </td>
-            <td><kbd>←/→</kbd></td><td class="act">
-              切换产出
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>空格</kbd></td><td class="act">
-              视频播放/暂停(图片为切组)
-            </td>
-            <td><kbd>Tab</kbd></td><td class="act">
-              互换底图/对比图
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>M</kbd></td><td class="act">
-              切换声音来源(原视频/对比视频)
-            </td>
-            <td />
-            <td />
-          </tr>
-          <tr class="grp">
-            <td colspan="4">
-              光圈
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">
-              切换模式
-            </td>
-            <td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">
-              光圈大小
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>左键点击</kbd></td><td class="act">
-              钉住光圈
-            </td>
-            <td><kbd>右键</kbd></td><td class="act">
-              去掉光圈钉
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">
-              光圈大小
-            </td>
-            <td />
-            <td />
-          </tr>
-          <tr class="grp">
-            <td colspan="4">
-              视图
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>滚轮</kbd></td><td class="act">
-              缩放
-            </td>
-            <td><kbd>拖拽</kbd></td><td class="act">
-              平移
-            </td>
-          </tr>
-          <tr class="grp">
-            <td colspan="4">
-              导出
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">
-              复制图片
-            </td>
-            <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">
-              保存图片 / 录制合成视频
-            </td>
-          </tr>
-          <tr>
-            <td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td class="act">
-              导出交互 HTML
-            </td>
-            <td />
-            <td />
-          </tr>
+          <tbody>
+            <tr class="grp">
+              <td colspan="4">
+                切换
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>↑/↓</kbd> <kbd>退格</kbd></td><td class="act">
+                切组
+              </td>
+              <td><kbd>←/→</kbd></td><td class="act">
+                切换产出
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>空格</kbd></td><td class="act">
+                视频播放/暂停(图片为切组)
+              </td>
+              <td><kbd>Tab</kbd></td><td class="act">
+                互换底图/对比图
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>M</kbd></td><td class="act">
+                切换声音来源(原视频/对比视频)
+              </td>
+              <td />
+              <td />
+            </tr>
+            <tr class="grp">
+              <td colspan="4">
+                光圈
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">
+                切换模式
+              </td>
+              <td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">
+                光圈大小
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>左键点击</kbd></td><td class="act">
+                钉住光圈
+              </td>
+              <td><kbd>右键</kbd></td><td class="act">
+                去掉光圈钉
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">
+                光圈大小
+              </td>
+              <td />
+              <td />
+            </tr>
+            <tr class="grp">
+              <td colspan="4">
+                视图
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>滚轮</kbd></td><td class="act">
+                缩放
+              </td>
+              <td><kbd>拖拽</kbd></td><td class="act">
+                平移
+              </td>
+            </tr>
+            <tr class="grp">
+              <td colspan="4">
+                导出
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">
+                复制图片
+              </td>
+              <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">
+                保存图片 / 录制合成视频
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td class="act">
+                导出交互 HTML
+              </td>
+              <td />
+              <td />
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
