@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
         <div class="separator" />
 
         <div class="item">
-          <label>标记位置</label>
+          <label>文件名匹配</label>
           <div class="seg-group">
             <button class="seg-btn" :class="{ active: settings.matchMode === 'prefix' }" @click="settings.matchMode = 'prefix'">
               前缀
