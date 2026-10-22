@@ -54,7 +54,10 @@ function waitLoaded(v) {
 function playAll() {
   const vs = frontVideos();
   const base = vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
-  base?.play().then(() => vs.filter(v => v !== base).forEach(v => v.play())).catch(() => {});
+  // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve),拼接视频两半就不同帧
+  const started = base?.play();
+  vs.filter(v => v !== base).forEach(v => v.play().catch(() => {}));
+  started?.catch(() => vs.forEach(v => v.pause()));
 }
 function togglePlay() {
   const vs = frontVideos();
@@ -272,14 +275,13 @@ function fitRectOf(el) {
   return [(w - iw) / 2, (h - ih) / 2, iw, ih];
 }
 
-// 合成绘制:图片直绘;视频取当前帧;拼接视频 base 取左半、hover 取右半(源矩形裁切)
+// 合成绘制:图片直绘;视频取当前帧;拼接视频按 data-sx 取半边(模板里跟着 swapped 换)
 function drawMedia(ctx, el, dx, dy, dw, dh) {
   const v = el instanceof HTMLVideoElement ? el : el.querySelector('video');
   if (!v)
     return ctx.drawImage(el, dx, dy, dw, dh);
-  const half = el.classList.contains('ugrv-half');
-  const sw = v.videoWidth / (half ? 2 : 1);
-  const sx = half && el.classList.contains('ugrv-b') ? sw : 0;
+  const sw = v.videoWidth / (el.classList.contains('ugrv-half') ? 2 : 1);
+  const sx = (Number(v.dataset.sx) || 0) * sw;
   ctx.drawImage(v, sx, 0, sw, v.videoHeight, dx, dy, dw, dh);
 }
 
@@ -406,12 +408,12 @@ onBeforeUnmount(() => {
         <template v-if="s?.kind === 'video' && s.stitched">
           <div class="ugrv-a ugrv-half">
             <div class="ugrv-crop" :style="cropStyle">
-              <video :src="s.base" preload="auto" playsinline :style="cropVideoStyle" @loadedmetadata="onMeta" @ended="onEnded" />
+              <video :src="s.vids[0]" :style="s.swapped ? cropVideoRightStyle : cropVideoStyle" :data-sx="s.swapped ? 1 : 0" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
             </div>
           </div>
           <div class="ugrv-b ugrv-half" :style="i === cur ? maskStyle : undefined">
             <div class="ugrv-crop" :style="cropStyle">
-              <video :src="s.hover" preload="auto" playsinline muted :style="cropVideoRightStyle" @loadedmetadata="onMeta" @ended="onEnded" />
+              <video :src="s.vids[0]" :style="s.swapped ? cropVideoStyle : cropVideoRightStyle" :data-sx="s.swapped ? 0 : 1" preload="auto" playsinline muted @loadedmetadata="onMeta" @ended="onEnded" />
             </div>
           </div>
         </template>

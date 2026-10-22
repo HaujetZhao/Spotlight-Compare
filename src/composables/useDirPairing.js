@@ -81,9 +81,9 @@ export function useDirPairing() {
       kind: g.kind ?? 'image',
       stitched: !!g.stitched,
       // 视频对另带一份载入顺序的 srcs:Tab 互换只改角色(.ugrv-a/.ugrv-b 与静音),
-      // 不重设 src——视频元素换 src 会重载,卡一下
+      // 不重设 src——视频元素换 src 会重载,卡一下。拼接视频两半同源,靠 flipped 决定谁露左半
       vids: g.vids,
-      swapped: !!g.vids && g.base !== g.vids[0],
+      swapped: !!g.vids && (g.stitched ? !!g.flipped : g.base !== g.vids[0]),
     };
   });
   const needRestore = ref(false);
@@ -157,12 +157,15 @@ export function useDirPairing() {
     hIdx.value = 0;
   }
 
-  // 互换底图与当前产出(Tab):拼接图原图在右边时用
+  // 互换底图与当前产出(Tab):拼接图/拼接视频原图在右边时用
   function swapPair() {
     const g = group.value;
     if (!g)
       return;
     const i = hIdx.value;
+    // 拼接视频两槽同源,换 URL 换不了画面,靠 flipped 决定底图露哪半
+    if (g.kind === 'video' && g.stitched)
+      g.flipped = !g.flipped;
     [g.base, g.hovers[i]] = [g.hovers[i], g.base];
     [g.baseName, g.hoverNames[i]] = [g.hoverNames[i], g.baseName];
   }
