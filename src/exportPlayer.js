@@ -1,7 +1,7 @@
 // 导出播放器:当前一对图 → 内嵌 base64 的自包含单文件交互 HTML,点击下载。
-// 缩水版效果页:光圈跟随 + 滚轮缩放(以鼠标为中心) + 拖拽平移 + Ctrl+滚轮调光圈 + 双击复位,
+// 缩水版效果页:光圈跟随 + 滚轮缩放(以鼠标为中心) + 拖拽平移 + Ctrl+滚轮调光圈,
 // 以及与 App 相同的热键(1-4 切模式、[ ] , . 调光圈、Tab 互换、Ctrl+S 下载、Ctrl+C 复制、? 帮助浮层)、
-// 换底图/换对比图/换拼接图按钮、光圈钉(预置 pins,收件人可左键点/右键/Delete 增删,按方向两份,会话态)、lens 圆环。
+// 换底图/换对比图/换拼接图按钮、光圈钉(预置 pins,收件人可左键点/右键 增删,按方向两份,会话态)、lens 圆环。
 // transform-origin 固定 0 0,光圈坐标按 (屏幕-平移)/缩放 折算回局部空间。
 // 与 App 保持的行为同步清单见 CLAUDE.md 约定 4。
 import { canvasStops, maskCSS } from './mask';
@@ -74,6 +74,7 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 .ugrv-card h3{margin:0 0 14px;font:600 14px system-ui,sans-serif;opacity:0.9}
 .ugrv-card table{border-collapse:collapse;font:13px system-ui,sans-serif}
 .ugrv-card td{padding:5px 0}
+.ugrv-card tr.grp td{padding:10px 0 4px;color:#9db1ff;font:600 11px system-ui,sans-serif;letter-spacing:2px}
 .ugrv-card td:first-child{padding-right:26px;white-space:nowrap}
 .ugrv-card td:nth-child(3){padding-left:26px;white-space:nowrap}
 .ugrv-card .act{opacity:0.7}
@@ -88,12 +89,15 @@ body{margin:0;height:100dvh;background:#0b1020;overflow:hidden}
 <button class="ugrv-btn" data-pick="b">换对比图</button>
 <button class="ugrv-btn" data-pick="s">换拼接图</button>
 <div class="ugrv-help-mask"><div class="ugrv-card"><h3>快捷键</h3><table>
-<tr><td><kbd>滚轮</kbd></td><td class="act">缩放</td><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td></tr>
-<tr><td><kbd>拖拽</kbd></td><td class="act">平移</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
-<tr><td><kbd>双击</kbd></td><td class="act">复位</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">保存图片</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">光圈大小</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">复制图片</td></tr>
-<tr><td><kbd>Tab</kbd></td><td class="act">互换底图/对比图</td><td><kbd>左键点击</kbd></td><td class="act">钉住光圈</td></tr>
-<tr><td><kbd>右键</kbd>/<kbd>Delete</kbd></td><td class="act">去掉光圈钉</td><td></td><td></td></tr>
+<tr class="grp"><td colspan="4">光圈</td></tr>
+<tr><td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">切换模式</td><td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">光圈大小</td></tr>
+<tr><td><kbd>左键点击</kbd></td><td class="act">钉住光圈</td><td><kbd>右键</kbd></td><td class="act">去掉光圈钉</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">光圈大小</td><td></td><td></td></tr>
+<tr class="grp"><td colspan="4">视图</td></tr>
+<tr><td><kbd>滚轮</kbd></td><td class="act">缩放</td><td><kbd>拖拽</kbd></td><td class="act">平移</td></tr>
+<tr><td><kbd>Tab</kbd></td><td class="act">互换底图/对比图</td><td></td><td></td></tr>
+<tr class="grp"><td colspan="4">导出</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">保存图片</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">复制图片</td></tr>
 </table></div></div>
 </div>
 <script>
@@ -120,7 +124,7 @@ function setMode(m){mode=m;applyMask();el.style.cursor=m==='lens'?'none':'crossh
 function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');
   var w=el.clientWidth,h=el.clientHeight,k=Math.min(w/ai.naturalWidth,h/ai.naturalHeight),iw=ai.naturalWidth*k,ih=ai.naturalHeight*k;
   onImg=Math.abs(x-w/2)<=iw/2&&Math.abs(y-h/2)<=ih/2;
-  if(mode==='lens'){el.style.cursor=onImg?'none':'crosshair';bi.style.visibility=onImg?'visible':'hidden'}
+  if(mode==='lens'){el.style.cursor=onImg?'none':'crosshair';el.style.setProperty('--ugrv-r',onImg?'':'0px')}
   applyRing();ringVis();
 }
 function applyT(){el.querySelector('.stage').style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';applyRing()}
@@ -128,7 +132,7 @@ function move(e){var r=el.getBoundingClientRect();x=(e.clientX-r.left-tx)/s;y=(e
 function show(e){move(e);el.classList.add('ugrv-in');ringVis()}
 function hide(){el.classList.remove('ugrv-in');ringVis()}
 function setSize(d){size=Math.max(50,Math.min(400,size+d));el.style.setProperty('--ugrv-size',size+'px');applyRing()}
-// 钉:左键点击(位移<5px 且 <300ms,拖拽不放)放,右键/Delete 去掉指针所在那枚
+// 钉:左键点击(位移<5px 且 <300ms,拖拽不放)放,右键去掉指针所在那枚
 function addPin(){
   if(!el.classList.contains('ugrv-in'))return;
   var ra=fitRect(ai),fitK=ai.naturalWidth/ra[2];
@@ -151,7 +155,6 @@ addEventListener('pointerup',function(e){
   if(!pan)return;pan=false;if(matchMedia('(hover:none)').matches)hide();
 });
 el.addEventListener('contextmenu',function(e){e.preventDefault();unpin()});
-el.addEventListener('dblclick',function(){s=1;tx=0;ty=0;applyT()});
 el.addEventListener('dragstart',function(e){e.preventDefault()});
 el.addEventListener('wheel',function(e){
   e.preventDefault();
@@ -180,7 +183,7 @@ function composite(){
       stops[p.mode].forEach(function(q){g.addColorStop(q[0],q[1])});
       mkc.fillStyle=g;mkc.fillRect(0,0,mk.width,mk.height);
     });
-    if(el.classList.contains('ugrv-in')){
+    if(el.classList.contains('ugrv-in')&&(mode!=='lens'||onImg)){
       var mx=(x-ra[0])*fitK,my=(y-ra[1])*fitK,g=mkc.createRadialGradient(mx,my,0,mx,my,size*fitK);
       stops[mode].forEach(function(q){g.addColorStop(q[0],q[1])});
       mkc.fillStyle=g;mkc.fillRect(0,0,mk.width,mk.height);
@@ -234,7 +237,6 @@ addEventListener('keydown',function(e){
   if(e.key==='?'){toggleHelp();return}
   if(e.key==='Escape'&&helpMask.classList.contains('ugrv-on')){toggleHelp();return}
   if(e.key==='Tab'){e.preventDefault();var t=ai.src;ai.src=bi.src;bi.src=t;dir=1-dir;applyMask();return}
-  if(e.key==='Delete'){unpin();return}
   if(e.key>='1'&&e.key<='4'){setMode(['torch','brush','spotlight','lens'][e.key-1]);return}
   if(e.key==='['||e.key===',')setSize(-10);
   if(e.key===']'||e.key==='.')setSize(10);

@@ -118,12 +118,6 @@ export function usePanZoom(stage, viewer) {
     panning = false;
     viewer.value.style.cursor = '';
   }
-  function onDblClick() {
-    scale.value = 1;
-    pointX.value = 0;
-    pointY.value = 0;
-    applyTransform();
-  }
 
   // 放大镜圆环:遮罩坐标在 stage 局部空间,圆环挂在外层不吃 transform,
   // 位置/大小要按当前 scale/translate 换算回屏幕坐标(toLocal 的逆运算);
@@ -140,5 +134,5 @@ export function usePanZoom(stage, viewer) {
     return { left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` };
   });
 
-  return { x, y, active, onImg, scale, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle };
+  return { x, y, active, onImg, scale, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, ringStyle };
 }

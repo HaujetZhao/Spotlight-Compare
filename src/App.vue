@@ -15,9 +15,10 @@ import SettingsPanel from './SettingsPanel.vue';
 
 const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
+const showHelp = ref(false);
 const viewer = ref(null);
 const stage = ref(null);
-const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, onDblClick, ringStyle } = usePanZoom(stage, viewer);
+const { x, y, active, onImg, move, show, hide, onUp, onWheel, onDown, onPanMove, onPanUp, ringStyle } = usePanZoom(stage, viewer);
 
 // 钉住区:左键点击(非拖动)在指针处钉一份光圈效果(快照模式/大小/柔和度),右键去掉指针所在的那枚。
 // 按 pair.key(目录/底图名|产出名,方向性)存 IDB pairs store,一条记录 { pins: [...], ...以后每对的其他数值 };
@@ -124,6 +125,14 @@ function onKey(e) {
     swapPair();
     return;
   }
+  if (e.key === '?') {
+    showHelp.value = !showHelp.value;
+    return;
+  }
+  if (e.key === 'Escape' && showHelp.value) {
+    showHelp.value = false;
+    return;
+  }
   if (e.key === '[' || e.key === ',')
     settings.size = Math.max(50, settings.size - 10);
   if (e.key === ']' || e.key === '.')
@@ -190,7 +199,8 @@ function compositeCanvas() {
     mask.height = canvas.height;
     const mc = mask.getContext('2d');
     const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
-    if (active.value)
+    // 镜头模式出图时屏上不显实时光圈,合成同样不画
+    if (active.value && (settings.mode !== 'lens' || onImg.value))
       zones.push({ x: x.value, y: y.value, size: settings.size, stops: canvasStops(settings.mode, settings.softness) });
     for (const z of zones) {
       const mx = (z.x - ra[0]) * fitK;
@@ -270,7 +280,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="stages[cur]" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @dblclick="onDblClick" @contextmenu.prevent="unpin" @dragstart.prevent>
+  <div v-if="stages[cur]" ref="viewer" class="ugrv" :class="[`ugrv-m-${settings.mode}`, { 'ugrv-in': active, 'ugrv-on-img': onImg }]" :style="{ '--ugrv-x': `${x}px`, '--ugrv-y': `${y}px`, '--ugrv-size': `${settings.size}px`, '--ugrv-soft': `${settings.softness}%` }" @pointerenter="show" @pointerdown="show" @pointermove="move" @pointerleave="hide" @pointercancel="hide" @pointerup="onViewUp" @wheel.prevent="onWheel" @mousedown="onViewDown" @contextmenu.prevent="unpin" @dragstart.prevent>
     <div ref="stage" class="stage">
       <div v-for="(s, i) in stages" :key="i" class="layer" :class="{ front: i === cur }">
         <template v-if="s">
@@ -281,6 +291,97 @@ onBeforeUnmount(() => {
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
     <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
+    <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
+      ?
+    </button>
+    <div v-if="showHelp" class="ugrv-help-mask" @click="showHelp = false">
+      <div class="ugrv-card">
+        <h3>快捷键</h3>
+        <table>
+          <tr class="grp">
+            <td colspan="4">
+              切换
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>↑/↓</kbd> <kbd>空格</kbd> <kbd>退格</kbd></td><td class="act">
+              切组
+            </td>
+            <td><kbd>←/→</kbd></td><td class="act">
+              切换产出
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>Tab</kbd></td><td class="act">
+              互换底图/对比图
+            </td>
+            <td />
+            <td />
+          </tr>
+          <tr class="grp">
+            <td colspan="4">
+              光圈
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>1</kbd>-<kbd>4</kbd></td><td class="act">
+              切换模式
+            </td>
+            <td><kbd>[</kbd> <kbd>]</kbd> <kbd>,</kbd> <kbd>.</kbd></td><td class="act">
+              光圈大小
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>左键点击</kbd></td><td class="act">
+              钉住光圈
+            </td>
+            <td><kbd>右键</kbd></td><td class="act">
+              去掉光圈钉
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>滚轮</kbd></td><td class="act">
+              光圈大小
+            </td>
+            <td />
+            <td />
+          </tr>
+          <tr class="grp">
+            <td colspan="4">
+              视图
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>滚轮</kbd></td><td class="act">
+              缩放
+            </td>
+            <td><kbd>拖拽</kbd></td><td class="act">
+              平移
+            </td>
+          </tr>
+          <tr class="grp">
+            <td colspan="4">
+              导出
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="act">
+              复制图片
+            </td>
+            <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="act">
+              保存图片
+            </td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td class="act">
+              导出交互 HTML
+            </td>
+            <td />
+            <td />
+          </tr>
+        </table>
+      </div>
+    </div>
   </div>
 
   <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
@@ -327,6 +428,10 @@ body {
 .ugrv.ugrv-in {
   --ugrv-r: var(--ugrv-size);
 }
+/* 放大镜出图:只藏实时光圈(半径归零),钉不受影响 */
+.ugrv-m-lens:not(.ugrv-on-img) {
+  --ugrv-r: 0px;
+}
 .stage {
   position: absolute;
   inset: 0;
@@ -359,12 +464,9 @@ body {
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
 }
-/* 放大镜:在底图内藏光标用圆环代替,出图恢复鼠标并藏光圈遮罩 */
+/* 放大镜:在底图内藏光标用圆环代替,出图恢复鼠标 */
 .ugrv-m-lens.ugrv-on-img {
   cursor: none;
-}
-.ugrv-m-lens:not(.ugrv-on-img) .ugrv-b {
-  visibility: hidden;
 }
 .ugrv-ring {
   position: absolute;
@@ -377,6 +479,76 @@ body {
 }
 .ugrv-m-lens.ugrv-on-img.ugrv-in .ugrv-ring {
   opacity: 1;
+}
+/* 帮助浮层(与导出页同款) */
+.ugrv-help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(30, 40, 66, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font: 700 15px system-ui, sans-serif;
+  cursor: pointer;
+}
+.ugrv-help:hover {
+  background: rgba(52, 64, 100, 0.9);
+}
+.ugrv-help-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ugrv-card {
+  min-width: 420px;
+  padding: 20px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(16, 22, 40, 0.92);
+  color: #fff;
+}
+.ugrv-card h3 {
+  margin: 0 0 14px;
+  font: 600 14px system-ui, sans-serif;
+  opacity: 0.9;
+}
+.ugrv-card table {
+  border-collapse: collapse;
+  font: 13px system-ui, sans-serif;
+}
+.ugrv-card td {
+  padding: 5px 0;
+}
+.ugrv-card tr.grp td {
+  padding: 10px 0 4px;
+  color: #9db1ff;
+  font: 600 11px system-ui, sans-serif;
+  letter-spacing: 2px;
+}
+.ugrv-card td:nth-child(odd) {
+  padding-right: 22px;
+  white-space: nowrap;
+}
+.ugrv-card td:nth-child(even) {
+  padding-right: 26px;
+  opacity: 0.7;
+}
+.ugrv-card kbd {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  font: 11px/1.7 system-ui, sans-serif;
 }
 @media (hover: none) {
   .ugrv {
