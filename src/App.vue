@@ -325,7 +325,9 @@ function maskStops() {
   return [[0, '#000'], [0.72, '#000'], [0.78, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']];
 }
 
-// Ctrl+C:把当前叠加效果(底图 + 光圈内透出的 hover 图)合成后写入剪贴板
+// Ctrl+C:把当前叠加效果(底图 + 光圈内透出的 hover 图)合成后写入剪贴板。
+// 方案 A:以原图分辨率为画布导出整张图,缩放/平移只是观察手段不参与合成;
+// 光圈中心/大小按 stage 局部坐标线性映射(fitK = 原图宽 / 屏幕显示宽),相对大小与屏幕一致。
 async function copyComposite() {
   const el = viewer.value;
   const imgA = el?.querySelector('.ugrv-a');
@@ -334,43 +336,36 @@ async function copyComposite() {
     return;
   const w = el.clientWidth;
   const h = el.clientHeight;
-  const dpr = window.devicePixelRatio || 1;
-  // object-fit: contain 的实际绘制矩形
+  // object-fit: contain 的实际绘制矩形(stage 局部空间)
   const fitRect = (img) => {
     const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
     const iw = img.naturalWidth * k;
     const ih = img.naturalHeight * k;
     return [(w - iw) / 2, (h - ih) / 2, iw, ih];
   };
-  // 复现 stage 变换:屏幕 = 中心 + 平移 + (局部 - 中心) × scale
-  const cx = w / 2;
-  const cy = h / 2;
-  const stageTransform = (c) => {
-    c.translate(cx + pointX.value, cy + pointY.value);
-    c.scale(scale.value, scale.value);
-    c.translate(-cx, -cy);
-  };
+  const ra = fitRect(imgA);
+  const fitK = imgA.naturalWidth / ra[2];
   const canvas = document.createElement('canvas');
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
+  canvas.width = imgA.naturalWidth;
+  canvas.height = imgA.naturalHeight;
   const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.drawImage(imgA, ...fitRect(imgA));
+  ctx.drawImage(imgA, 0, 0);
   if (active.value) {
     // hover 图画到临时画布,用径向渐变 destination-in 抠出光圈,再叠回
+    const rb = fitRect(imgB);
     const temp = document.createElement('canvas');
     temp.width = canvas.width;
     temp.height = canvas.height;
     const t = temp.getContext('2d');
-    t.scale(dpr, dpr);
-    t.drawImage(imgB, ...fitRect(imgB));
+    t.drawImage(imgB, (rb[0] - ra[0]) * fitK, (rb[1] - ra[1]) * fitK, rb[2] * fitK, rb[3] * fitK);
     t.globalCompositeOperation = 'destination-in';
-    stageTransform(t);
-    const g = t.createRadialGradient(x.value, y.value, 0, x.value, y.value, settings.size);
+    const mx = (x.value - ra[0]) * fitK;
+    const my = (y.value - ra[1]) * fitK;
+    const g = t.createRadialGradient(mx, my, 0, mx, my, settings.size * fitK);
     maskStops().forEach(([o, c]) => g.addColorStop(o, c));
     t.fillStyle = g;
-    t.fillRect(-w * 12, -h * 12, w * 25, h * 25);
-    ctx.drawImage(temp, 0, 0, w, h);
+    t.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(temp, 0, 0);
   }
   const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
