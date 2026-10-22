@@ -2,7 +2,7 @@
 // 选择页:打开文件夹批量配对 / 单选底图+对比(图文通用)/ 拼接 / 恢复上次文件夹
 import Icon from './Icon.vue';
 
-defineProps({ pair: { type: Object, default: null }, needRestore: Boolean, noMatch: Boolean });
+defineProps({ pair: { type: Object, default: null }, canRestore: Boolean, noMatch: Boolean });
 defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
 </script>
 
@@ -13,7 +13,7 @@ defineEmits(['pick', 'pickStitched', 'openFolder', 'grantRestore']);
     <p class="hint">
       或打开文件夹批量对比：带 "原-"前缀的是原图，同名的其余文件作对比图；带 "拼-" 前缀识别为拼接图，自动拆两半。
     </p>
-    <button v-if="needRestore" class="restore" @click="$emit('grantRestore')">
+    <button v-if="canRestore" class="restore" @click="$emit('grantRestore')">
       <Icon name="rotateLeft" />恢复上次的文件夹
     </button>
     <p v-if="noMatch" class="warn">

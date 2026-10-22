@@ -3,8 +3,8 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { settings } from './settings';
 
-const props = defineProps({ modelValue: Boolean });
-const emit = defineEmits(['update:modelValue']);
+const props = defineProps({ modelValue: Boolean, busy: Boolean });
+const emit = defineEmits(['update:modelValue', 'close']);
 
 // 四种光圈风格(与参考 zip 导出对齐;跟随延迟统一为 0)
 const MODES = [
@@ -164,6 +164,17 @@ onBeforeUnmount(() => {
           <input v-model.number="settings.exportQuality" type="range" min="0.3" max="1" step="0.05">
           <span>{{ Math.round(settings.exportQuality * 100) }}%</span>
         </div>
+
+        <div class="separator" />
+
+        <button
+          class="close-btn"
+          :disabled="busy"
+          :title="busy ? '合成/导出中无法关闭' : '回到选择页，打开的文件夹可在选择页恢复'"
+          @click="$emit('close')"
+        >
+          关闭当前对比
+        </button>
       </div>
     </div>
   </Teleport>
@@ -277,5 +288,25 @@ input:disabled {
   height: 1px;
   background: rgba(255, 255, 255, 0.15);
   margin: 4px 0;
+}
+.close-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.close-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.close-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>

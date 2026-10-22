@@ -148,7 +148,8 @@ export function useDirPairing() {
       halfSides: stitchedSides(!!g.stitched, swapped),
     };
   });
-  const needRestore = ref(false);
+  // 选择页「恢复上次的文件夹」是否可点:权限待授权,或本次会话已关闭但句柄还在
+  const canRestore = ref(false);
   const noMatch = ref(false);
 
   // ===== 单独换图/换视频:替换当前组的底图 / 当前选中那张对比 =====
@@ -280,7 +281,7 @@ export function useDirPairing() {
     const dir = await window.showDirectoryPicker({ mode: 'read' });
     await idbSet('handles', 'dir', dir);
     dirHandle.value = dir;
-    needRestore.value = false;
+    canRestore.value = false;
     await scanDir(dir);
   }
 
@@ -291,7 +292,7 @@ export function useDirPairing() {
       return;
     dirHandle.value = dir;
     if (await dir.queryPermission({ mode: 'read' }) !== 'granted') {
-      needRestore.value = true;
+      canRestore.value = true;
       return;
     }
     await scanDir(dir);
@@ -300,7 +301,7 @@ export function useDirPairing() {
     const dir = dirHandle.value;
     if (dir && await dir.requestPermission({ mode: 'read' }) === 'granted')
       await scanDir(dir);
-    needRestore.value = false;
+    canRestore.value = false;
   }
 
   // 标记设置变了自动重扫(输入防抖)
@@ -311,6 +312,18 @@ export function useDirPairing() {
     clearTimeout(rescanTimer);
     rescanTimer = setTimeout(scanDir, 300, dirHandle.value);
   });
+
+  // 关闭当前会话:释放媒体与分组,回到选择页;句柄留在 IDB,可按原文件夹恢复。
+  // 待重扫一并取消,否则 300ms 后又扫描一遍把人拉回查看器
+  function close() {
+    clearTimeout(rescanTimer);
+    groups.value.forEach(revokeGroup);
+    groups.value = [];
+    gIdx.value = 0;
+    hIdx.value = 0;
+    noMatch.value = false;
+    canRestore.value = !!dirHandle.value;
+  }
 
   // ===== 翻页:↑/↓ 换组(原图),←/→ 换组内产出 =====
   function navGroup(d) {
@@ -330,5 +343,5 @@ export function useDirPairing() {
     groups.value.forEach(revokeGroup);
   }
 
-  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
+  return { groups, gIdx, hIdx, group, pair, canRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, close, navGroup, navHover, dispose };
 }

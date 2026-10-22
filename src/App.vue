@@ -19,7 +19,7 @@ import { circleHitsRect, fitMapping, mediaSize, toMedia } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
-const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
+const { groups, gIdx, hIdx, group, pair, canRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, close, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
 const showHelp = ref(false);
 const viewer = ref(null);
@@ -441,6 +441,12 @@ async function exportPage() {
   }
 }
 
+// 设置面板里的「关闭当前对比」:结束会话回选择页(文件夹句柄留给选择页恢复)
+function closePair() {
+  showSettings.value = false;
+  close();
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKey);
   window.addEventListener('mousemove', onPanMove);
@@ -607,9 +613,9 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
+  <PickerPage v-else :pair="pair" :can-restore="canRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
 
-  <SettingsPanel v-model="showSettings" />
+  <SettingsPanel v-model="showSettings" :busy="!!recording || !!exporting" @close="closePair" />
 </template>
 
 <style>
