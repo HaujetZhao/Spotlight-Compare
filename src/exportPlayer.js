@@ -120,7 +120,8 @@ function applyMask(){var m=pinLayers().concat([css(stops[mode])]).join(',');bi.s
 var ring=el.querySelector('.ugrv-ring');
 function ringVis(){var on=mode==='lens'&&onImg;ring.style.display=on?'block':'none';ring.style.opacity=on&&el.classList.contains('ugrv-in')?1:0}
 function applyRing(){var r=size*s*${RING_RADIUS};ring.style.left=(tx+x*s-r)+'px';ring.style.top=(ty+y*s-r)+'px';ring.style.width=ring.style.height=r*2+'px'}
-function setMode(m){mode=m;applyMask();el.style.cursor=m==='lens'?'none':'crosshair';ringVis()}
+// 离开镜头模式要把镜头模式的 --ugrv-r 内联覆盖清掉,否则切回 torch 时光圈半径停在 0
+function setMode(m){mode=m;if(m!=='lens')el.style.removeProperty('--ugrv-r');applyMask();el.style.cursor=m==='lens'?'none':'crosshair';ringVis();apply()}
 function apply(){q=false;el.style.setProperty('--ugrv-x',x+'px');el.style.setProperty('--ugrv-y',y+'px');
   var w=el.clientWidth,h=el.clientHeight,k=Math.min(w/ai.naturalWidth,h/ai.naturalHeight),iw=ai.naturalWidth*k,ih=ai.naturalHeight*k;
   onImg=Math.abs(x-w/2)<=iw/2&&Math.abs(y-h/2)<=ih/2;

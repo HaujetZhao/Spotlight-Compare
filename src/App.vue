@@ -11,6 +11,7 @@ import { useVideoExport } from './composables/useVideoExport';
 import { useVideoSync } from './composables/useVideoSync';
 import { saveBlob } from './download';
 import { exportPlayer } from './exportPlayer';
+import { exportVideo } from './exportVideo';
 import { idbGet, idbSet } from './idb';
 import { canvasStops, maskCSS, MODES, pinCSS } from './mask';
 import { fitMapping, mediaSize, toMedia } from './media';
@@ -398,20 +399,41 @@ function baseName(fallback) {
   return (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || fallback).replace(/\.\w+$/, '');
 }
 
-// Ctrl+E:压缩内嵌 + 拼装导出页都在 exportPlayer.js
+// Ctrl+E:压缩内嵌 + 拼装导出页在 exportPlayer.js(图片)/ exportVideo.js(视频)
+const exporting = ref(null); // 视频导出打包进度 { pct };大文件读 base64 要几秒
 async function exportHtml() {
-  if (!pair.value || pair.value.kind === 'video')
-    return; // 视频对不出交互页:内嵌 base64 视频体积和交互适配都不划算
-  // 钉转成原图分辨率坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
-  const imgA = viewer.value.querySelector('.layer.front .ugrv-a');
-  const { rect, k } = fitMapping(imgA, viewer.value.clientWidth, viewer.value.clientHeight);
+  if (!pair.value?.base || !pair.value.hover || exporting.value)
+    return; // 只有底图时没有可对比的另一路,导出页不完整
+  // 钉转成底图媒体像素坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
+  const frontA = viewer.value.querySelector('.layer.front .ugrv-a');
+  const { rect, k } = fitMapping(frontA, viewer.value.clientWidth, viewer.value.clientHeight);
+  const pinData = pins.value.map(p => ({ ...toMedia(p, rect, k), mode: p.mode }));
+  if (pair.value.kind === 'video') {
+    exporting.value = { pct: 0 };
+    try {
+      await exportVideo({
+        urlA: pair.value.base,
+        urlB: pair.value.hover,
+        stitched: pair.value.stitched,
+        halfSides: pair.value.halfSides,
+        audioRole: pair.value.audioRole,
+        name: baseName('对比'),
+        pins: pinData,
+        onProgress: pct => exporting.value.pct = pct,
+      });
+    }
+    finally {
+      exporting.value = null;
+    }
+    return;
+  }
   await exportPlayer({
     urlA: pair.value.base,
     urlB: pair.value.hover,
     nameA: group.value?.baseName,
     nameB: group.value?.hoverNames?.[hIdx.value],
     name: baseName('对比'),
-    pins: pins.value.map(p => ({ ...toMedia(p, rect, k), mode: p.mode })),
+    pins: pinData,
   });
 }
 
@@ -470,6 +492,9 @@ onBeforeUnmount(() => {
     </button>
     <div v-if="recording" class="ugrv-rec">
       {{ recording.offline ? '合成中' : '录制中' }} {{ Math.round(recording.pct * 100) }}% · {{ recording.offline ? 'Esc 取消' : '空格停止并保存 · Esc 取消' }}
+    </div>
+    <div v-if="exporting" class="ugrv-rec ugrv-exp">
+      打包中 {{ Math.round(exporting.pct * 100) }}%
     </div>
     <div v-if="showHelp" class="ugrv-help-mask" @click="showHelp = false">
       <div class="ugrv-card">
@@ -728,6 +753,9 @@ body {
   color: #fff;
   font: 600 13px system-ui, sans-serif;
   user-select: none;
+}
+.ugrv-exp {
+  background: rgba(44, 84, 178, 0.88);
 }
 .ugrv-help-mask {
   position: absolute;
