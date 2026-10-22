@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "mediabunny": "^1.62.0",
     "vue": "^3.4.0"
   },
   "devDependencies": {

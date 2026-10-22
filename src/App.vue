@@ -13,6 +13,7 @@ import { canvasStops, maskCSS, pinCSS } from './mask';
 import { mediaSize } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
+import { convertComposite, offlineSupported } from './videoConvert';
 import { startRecording } from './videoRecord';
 
 const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
@@ -270,7 +271,12 @@ function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA')
     return;
-  // 录制中只认空格(停下保存)和 Esc(取消),其余一律忽略:翻组/换声/放钉都会毁掉录制
+  // 离线合成中:Esc 取消,其余键照常(管线读的是文件,不碰播放界面;Ctrl+S 有 converting 拦)
+  if (recording.value?.offline && e.key === 'Escape') {
+    recording.value = null;
+    return;
+  }
+  // 实时录制中只认空格(停下保存)和 Esc(取消),其余一律忽略:翻组/换声/放钉都会毁掉录制
   if (recording.value) {
     if (e.key === ' ') {
       e.preventDefault();
@@ -471,15 +477,57 @@ async function downloadComposite() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-// Ctrl+S(视频对):实时录制合成视频——两路从头同播,钉住的光圈冻成静态 mask 烧进画面,
-// 出声那路带进音轨;播完或空格停下即保存,Esc 取消。录制中其余快捷键一律忽略。
-function recordVideo() {
-  if (recorder || !pair.value?.base || !pair.value?.hover)
+// Ctrl+S(视频对):合成视频。优先离线转码(原帧率、高码率、快于实时、可后台、不占播放界面),
+// WebCodecs 解不了或编码器缺才退回实时录制(从头同播,播完/空格停即存)。
+// 钉住的光圈冻成静态 mask 烧进画面,音轨取出声那路。实时录制中其余快捷键一律忽略。
+let converting = false;
+async function recordVideo() {
+  if (recorder || converting || !pair.value?.base || !pair.value?.hover)
     return;
-  const zones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
+  const p = pair.value;
+  const stageZones = pins.value.map(p => ({ x: p.x, y: p.y, size: p.size, stops: canvasStops(p.mode, p.softness) }));
+  // 光圈坐标按原图分辨率映射(与 compositeInto 同一线性映射),离线管线直接用
+  const frontA = viewer.value?.querySelector('.layer.front .ugrv-a');
+  if (!frontA)
+    return;
+  const ra = fitRectOf(frontA);
+  const fitK = mediaSize(frontA).w / ra[2];
+  const zones = stageZones.map(z => ({ mx: (z.x - ra[0]) * fitK, my: (z.y - ra[1]) * fitK, size: z.size * fitK, stops: z.stops }));
+  const audioUrl = !p.stitched && hoverAudio.value ? p.hover : p.base;
+  const baseBlob = await fetch(p.base).then(r => r.blob());
+  const hoverBlob = await fetch(p.hover).then(r => r.blob());
+  try {
+    if (await offlineSupported(baseBlob, hoverBlob)) {
+      converting = true;
+      recording.value = { pct: 0, offline: true };
+      const blob = await convertComposite({
+        baseBlob,
+        hoverBlob,
+        audioBlob: audioUrl === p.base ? baseBlob : await fetch(audioUrl).then(r => r.blob()),
+        half: p.stitched,
+        baseSx: p.swapped ? 1 : 0,
+        hoverSx: p.swapped ? 0 : 1,
+        zones,
+        onProgress: pct => recording.value && (recording.value.pct = pct),
+        canceled: () => !recording.value,
+      });
+      if (blob)
+        saveBlob(blob, `${videoName()}-合成.mp4`);
+      return;
+    }
+  }
+  catch (e) {
+    console.error('离线合成失败,退回实时录制', e);
+  }
+  finally {
+    converting = false;
+    if (recording.value?.offline)
+      recording.value = null;
+  }
+  // 实时录制兜底
   const canvas = document.createElement('canvas');
   const scratch = {};
-  if (!compositeInto(canvas, zones, scratch))
+  if (!compositeInto(canvas, stageZones, scratch))
     return; // 先画一帧:定下画布尺寸、确认媒体就绪
   recorder = startRecording(canvas, frontVideos().find(v => !v.muted));
   syncSlaves();
@@ -495,11 +543,21 @@ function recordVideo() {
     const vs = frontVideos();
     if (vs.every(v => v.paused))
       return finishRecording(true); // 空格暂停即停录保存
-    compositeInto(canvas, zones, scratch);
+    compositeInto(canvas, stageZones, scratch);
     recording.value.pct = Math.min(1, vs[0].currentTime / dur);
     requestAnimationFrame(draw);
   };
   requestAnimationFrame(draw);
+}
+function videoName() {
+  return (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
+}
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 async function finishRecording(save) {
   const r = recorder;
@@ -510,13 +568,7 @@ async function finishRecording(save) {
   frontVideos().forEach(v => v.pause());
   if (!save)
     return;
-  const blob = await r.stop();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '合成').replace(/\.\w+$/, '');
-  a.download = `${name}-合成.${r.ext}`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  saveBlob(await r.stop(), `${videoName()}-合成.${r.ext}`);
 }
 
 // Ctrl+E:压缩内嵌 + 拼装导出页都在 exportPlayer.js
@@ -591,7 +643,7 @@ onBeforeUnmount(() => {
       ?
     </button>
     <div v-if="recording" class="ugrv-rec">
-      录制中 {{ Math.round(recording.pct * 100) }}% · 空格停止并保存 · Esc 取消
+      {{ recording.offline ? '合成中' : '录制中' }} {{ Math.round(recording.pct * 100) }}% · {{ recording.offline ? 'Esc 取消' : '空格停止并保存 · Esc 取消' }}
     </div>
     <div v-if="showHelp" class="ugrv-help-mask" @click="showHelp = false">
       <div class="ugrv-card">
