@@ -10,8 +10,7 @@ import { usePanZoom } from './composables/usePanZoom';
 import { useVideoExport } from './composables/useVideoExport';
 import { useVideoSync } from './composables/useVideoSync';
 import { saveBlob } from './download';
-import { exportPlayer } from './exportPlayer';
-import { exportVideo } from './exportVideo';
+import { exportHtml } from './exportHtml';
 import { idbGet, idbSet } from './idb';
 import { canvasStops, maskCSS, MODES, pinCSS } from './mask';
 import { fitMapping, mediaSize, toMedia } from './media';
@@ -225,7 +224,7 @@ function onKey(e) {
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
     e.preventDefault();
-    exportHtml();
+    exportPage();
     return;
   }
   // 1-4 切模式,[ ] 和 , . 调光圈大小,Tab 互换底图/产出
@@ -399,42 +398,35 @@ function baseName(fallback) {
   return (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || fallback).replace(/\.\w+$/, '');
 }
 
-// Ctrl+E:压缩内嵌 + 拼装导出页在 exportPlayer.js(图片)/ exportVideo.js(视频)
-const exporting = ref(null); // 视频导出打包进度 { pct };大文件读 base64 要几秒
-async function exportHtml() {
+// Ctrl+E:图片 / 视频共用 exportHtml.js;视频大文件读 base64 期间显示打包进度
+const exporting = ref(null); // 打包进度 { pct }
+async function exportPage() {
   if (!pair.value?.base || !pair.value.hover || exporting.value)
     return; // 只有底图时没有可对比的另一路,导出页不完整
   // 钉转成底图媒体像素坐标导出(与合成同映射),收件人页按其视口换算回屏幕层
   const frontA = viewer.value.querySelector('.layer.front .ugrv-a');
   const { rect, k } = fitMapping(frontA, viewer.value.clientWidth, viewer.value.clientHeight);
   const pinData = pins.value.map(p => ({ ...toMedia(p, rect, k), mode: p.mode }));
-  if (pair.value.kind === 'video') {
+  const video = pair.value.kind === 'video';
+  // 图片拼接对已拆成两张图,导出页当普通对;视频拼接对才是同一源取左右半
+  const stitched = video && pair.value.stitched;
+  if (video)
     exporting.value = { pct: 0 };
-    try {
-      await exportVideo({
-        urlA: pair.value.base,
-        urlB: pair.value.hover,
-        stitched: pair.value.stitched,
-        halfSides: pair.value.halfSides,
-        audioRole: pair.value.audioRole,
-        name: baseName('对比'),
-        pins: pinData,
-        onProgress: pct => exporting.value.pct = pct,
-      });
-    }
-    finally {
-      exporting.value = null;
-    }
-    return;
+  try {
+    await exportHtml({
+      sides: [
+        { url: pair.value.base, kind: pair.value.kind, name: group.value?.baseName, crop: stitched ? (pair.value.halfSides.a ? 'right' : 'left') : 'full' },
+        { url: pair.value.hover, kind: pair.value.kind, name: group.value?.hoverNames?.[hIdx.value], crop: stitched ? (pair.value.halfSides.b ? 'right' : 'left') : 'full' },
+      ],
+      name: baseName('对比'),
+      pins: pinData,
+      audioRole: pair.value.audioRole,
+      onProgress: pct => exporting.value.pct = pct,
+    });
   }
-  await exportPlayer({
-    urlA: pair.value.base,
-    urlB: pair.value.hover,
-    nameA: group.value?.baseName,
-    nameB: group.value?.hoverNames?.[hIdx.value],
-    name: baseName('对比'),
-    pins: pinData,
-  });
+  finally {
+    exporting.value = null;
+  }
 }
 
 onMounted(() => {

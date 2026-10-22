@@ -1,0 +1,31 @@
+@property --ugrv-r{syntax:"<length>";inherits:true;initial-value:0px}
+html,body{margin:0;height:100%;background:#0b1020;overflow:hidden}
+.ugrv{position:relative;width:100vw;height:100dvh;overflow:hidden;user-select:none;touch-action:none;--ugrv-size:130px;--ugrv-r:0px}
+.ugrv-stage{position:absolute;inset:0;transform-origin:0 0}
+.ugrv-side{position:absolute;inset:0}
+.ugrv-a{z-index:1}
+.ugrv-b{z-index:2}
+.ugrv-crop{position:absolute;overflow:hidden}
+.ugrv-media{position:absolute;display:block;object-fit:fill;pointer-events:none;-webkit-user-drag:none}
+.ugrv.ugrv-in{--ugrv-r:var(--ugrv-size)}
+.ugrv-ring{position:absolute;z-index:3;border-radius:50%;border:2px solid rgba(255,255,255,0.85);box-shadow:0 0 0 1px rgba(0,0,0,0.35),0 10px 26px rgba(0,0,0,0.4),inset 0 0 22px rgba(255,255,255,0.16);pointer-events:none;opacity:0}
+.ugrv-help{position:absolute;left:12px;bottom:12px;z-index:4;width:30px;height:30px;border:1px solid rgba(255,255,255,0.4);border-radius:50%;background:rgba(30,40,66,0.8);box-shadow:0 2px 8px rgba(0,0,0,0.4);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
+.ugrv-help:hover{background:rgba(52,64,100,0.9)}
+.ugrv-btn{position:absolute;right:12px;top:12px;z-index:4;padding:5px 14px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-btn:hover{background:rgba(52,64,100,0.9)}
+.ugrv-btn[data-pick='b']{top:44px}
+.ugrv-btn[data-pick='s']{top:76px}
+.ugrv-play{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:4;padding:5px 22px;border:1px solid rgba(255,255,255,0.4);border-radius:999px;background:rgba(30,40,66,0.8);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ugrv-play:hover{background:rgba(52,64,100,0.9)}
+.ugrv-play[hidden]{display:none}
+.ugrv-help-mask{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}
+.ugrv-help-mask.ugrv-on{display:flex}
+.ugrv-card{min-width:340px;padding:20px 26px;border:1px solid rgba(255,255,255,0.14);border-radius:14px;background:rgba(16,22,40,0.92);color:#fff}
+.ugrv-card h3{margin:0 0 14px;font:600 14px system-ui,sans-serif;opacity:0.9}
+.ugrv-card table{border-collapse:collapse;font:13px system-ui,sans-serif}
+.ugrv-card td{padding:5px 0}
+.ugrv-card tr.grp td{padding:10px 0 4px;color:#9db1ff;font:600 11px system-ui,sans-serif;letter-spacing:2px}
+.ugrv-card td:first-child{padding-right:26px;white-space:nowrap}
+.ugrv-card td:nth-child(3){padding-left:26px;white-space:nowrap}
+.ugrv-card .act{opacity:0.7}
+.ugrv-card kbd{display:inline-block;padding:1px 7px;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:rgba(255,255,255,0.1);font:11px/1.7 system-ui,sans-serif}
