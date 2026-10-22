@@ -439,8 +439,18 @@ async function downloadComposite() {
 // 以及与 App 相同的热键(1-4 切模式、[ ] , . 调光圈、Ctrl+S 下载、Ctrl+C 复制)。
 // transform-origin 固定 0 0,光圈坐标按 (屏幕-平移)/缩放 折算回局部空间。
 // 四模式渐变站点在导出页里是一张表,canvas 合成与 CSS 遮罩共用,柔和度/格式/质量在导出时烘焙。
-// 内嵌图片先按面板格式/质量重编码压缩(JPEG 无 alpha,垫白底),再转 dataURL
-async function toDataURL(url) {
+const blobToDataURL = blob => new Promise((resolve, reject) => {
+  const fr = new FileReader();
+  fr.onload = () => resolve(fr.result);
+  fr.onerror = reject;
+  fr.readAsDataURL(blob);
+});
+
+// 内嵌图:jpeg/webp 源文件原样嵌入不再压缩,其余(png/gif/avif 等)按面板格式/质量重编码(JPEG 无 alpha,垫白底)
+async function toDataURL(url, name) {
+  const ext = name?.match(/\.(\w+)$/)?.[1]?.toLowerCase();
+  if (ext === 'jpg' || ext === 'jpeg' || ext === 'webp')
+    return blobToDataURL(await (await fetch(url)).blob());
   const img = new Image();
   img.src = url;
   await img.decode();
@@ -454,12 +464,7 @@ async function toDataURL(url) {
   }
   ctx.drawImage(img, 0, 0);
   const blob = await new Promise(r => canvas.toBlob(r, `image/${settings.exportFormat}`, settings.exportQuality));
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
-    fr.readAsDataURL(blob);
-  });
+  return blobToDataURL(blob);
 }
 
 // 遮罩渐变与 App 内四种模式的 CSS 一致,当前柔和度/模式烘焙进导出文件
@@ -476,7 +481,10 @@ async function exportHtml() {
   if (!pair.value)
     return;
   const name = (group.value?.hoverNames?.[hIdx.value] || group.value?.baseName || '对比').replace(/\.\w+$/, '');
-  const [a, b] = await Promise.all([toDataURL(pair.value.base), toDataURL(pair.value.hover)]);
+  const [a, b] = await Promise.all([
+    toDataURL(pair.value.base, group.value?.baseName),
+    toDataURL(pair.value.hover, group.value?.hoverNames?.[hIdx.value]),
+  ]);
   const mask = exportMask();
   const cursor = settings.mode === 'lens' ? 'none' : 'crosshair';
   const html = `<!doctype html>
