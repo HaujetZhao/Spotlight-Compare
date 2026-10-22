@@ -6,55 +6,78 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import { settings } from './settings';
 
-const pairs = ref([]); // [{ base, hover }] objectURL
-const current = ref(0);
-const pair = computed(() => pairs.value[current.value]);
+const groups = ref([]); // [{ base, hovers: [url] }]
+const gIdx = ref(0);
+const hIdx = ref(0);
+const group = computed(() => groups.value[gIdx.value]);
+// 当前对:产出取组内第 hIdx 张(默认第一张)
+const pair = computed(() => {
+  const g = group.value;
+  if (!g) return null;
+  return { base: g.base, hover: g.hovers[hIdx.value] ?? g.hovers[0] };
+});
+const pairs = computed(() => groups.value.map(g => ({ base: g.base, hover: g.hovers[0] })));
+const current = computed(() => gIdx.value);
 const showSettings = ref(false);
 const needRestore = ref(false);
 const viewer = ref(null);
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
 
-function revokePair(p) {
-  URL.revokeObjectURL(p.base);
-  URL.revokeObjectURL(p.hover);
+function revokeGroup(g) {
+  URL.revokeObjectURL(g.base);
+  g.hovers.forEach(URL.revokeObjectURL);
 }
 
-// ===== 单独换图:替换当前对的某一侧 =====
+// ===== 单独换图:替换当前组的原图 / 当前选中那张产出 =====
 async function pick(key) {
   const [handle] = await window.showOpenFilePicker({
     types: [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }],
   });
   const url = URL.createObjectURL(await handle.getFile());
-  if (!pair.value) {
-    pairs.value = [{ base: '', hover: '' }];
-    current.value = 0;
+  if (!group.value) {
+    groups.value = [{ base: '', hovers: [''] }];
+    gIdx.value = 0;
+    hIdx.value = 0;
   }
-  if (pair.value[key]) URL.revokeObjectURL(pair.value[key]);
-  pair.value[key] = url;
+  if (key === 'base') {
+    if (group.value.base) URL.revokeObjectURL(group.value.base);
+    group.value.base = url;
+  } else {
+    const old = group.value.hovers[hIdx.value];
+    if (old) URL.revokeObjectURL(old);
+    group.value.hovers[hIdx.value] = url;
+  }
 }
 
 // ===== 文件夹批対 =====
 const dirHandle = ref(null);
 
-// 文件名(去扩展名)按标记分角色:带标记=原图,不带=hover;去掉标记后相同视为一对
+// 文件名主干:去扩展名、消掉批量重命名的系统尾缀"(数字)"与末尾空格
+function stemOf(name) {
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  return stem.replace(/\s*\(\d+\)\s*$/, '').trimEnd();
+}
+
+// 按标记分角色分组:带原图标记=原图(每根至多一张),不带=产出;同根全部产出归一组
 function pairUp(names) {
   const m = settings.matchStr;
   const byRoot = new Map();
   for (const name of names) {
-    const dot = name.lastIndexOf('.');
-    const stem = dot > 0 ? name.slice(0, dot) : name;
-    if (dot > 0 && !IMAGE_EXTS.has(name.slice(dot + 1).toLowerCase())) continue;
+    const stem = stemOf(name);
+    if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase())) continue;
     const marked = settings.matchMode === 'prefix' ? stem.startsWith(m) : stem.endsWith(m);
     const root = marked
       ? (settings.matchMode === 'prefix' ? stem.slice(m.length) : stem.slice(0, -m.length))
       : stem;
     if (!root) continue;
-    const slot = byRoot.get(root) || {};
-    slot[marked ? 'baseName' : 'hoverName'] = name;
+    const slot = byRoot.get(root) || { baseName: '', hoverNames: [] };
+    if (marked) slot.baseName = name;
+    else slot.hoverNames.push(name);
     byRoot.set(root, slot);
   }
-  return [...byRoot.values()].filter(s => s.baseName && s.hoverName);
+  return [...byRoot.values()].filter(s => s.baseName && s.hoverNames.length).sort((a, b) => a.baseName.localeCompare(b.baseName));
 }
 
 async function scanDir(dir) {
@@ -63,15 +86,16 @@ async function scanDir(dir) {
     if (handle.kind === 'file') names.push(name);
   }
   const list = [];
-  for (const { baseName, hoverName } of pairUp(names)) {
+  for (const { baseName, hoverNames } of pairUp(names)) {
     list.push({
       base: URL.createObjectURL(await dir.getFileHandle(baseName).then(h => h.getFile())),
-      hover: URL.createObjectURL(await dir.getFileHandle(hoverName).then(h => h.getFile())),
+      hovers: await Promise.all(hoverNames.sort().map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL))),
     });
   }
-  pairs.value.forEach(revokePair);
-  pairs.value = list;
-  current.value = 0;
+  groups.value.forEach(revokePair);
+  groups.value = list;
+  gIdx.value = 0;
+  hIdx.value = 0;
 }
 
 async function openFolder() {
@@ -134,16 +158,24 @@ async function idbGet(key) {
   });
 }
 
-// ===== 翻对 =====
-function nav(d) {
-  if (pairs.value.length < 2) return;
-  current.value = (current.value + d + pairs.value.length) % pairs.value.length;
+// ===== 翻页:←/→ 换组(原图),↑/↓ 换组内产出 =====
+function navGroup(d) {
+  if (groups.value.length < 2) return;
+  gIdx.value = (gIdx.value + d + groups.value.length) % groups.value.length;
+  hIdx.value = 0; // 切组重置到第一张产出
+}
+function navHover(d) {
+  const n = group.value?.hovers.length ?? 0;
+  if (n < 2) return;
+  hIdx.value = (hIdx.value + d + n) % n;
 }
 function onKey(e) {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.key === 'ArrowLeft') nav(-1);
-  if (e.key === 'ArrowRight') nav(1);
+  if (e.key === 'ArrowLeft') navGroup(-1);
+  if (e.key === 'ArrowRight') navGroup(1);
+  if (e.key === 'ArrowUp') navHover(-1);
+  if (e.key === 'ArrowDown') navHover(1);
 }
 
 // ===== 光圈/缩放/平移 =====
@@ -268,7 +300,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey);
   window.removeEventListener('mousemove', onPanMove);
   window.removeEventListener('mouseup', onPanUp);
-  pairs.value.forEach(revokePair);
+  groups.value.forEach(revokeGroup);
 });
 </script>
 
@@ -282,9 +314,14 @@ onBeforeUnmount(() => {
     <span class="ugrv-lab ugrv-lab-b">对比图</span>
     <div class="ugrv-ring" :style="ringStyle" />
     <div class="toolbar">
-      <button v-if="pairs.length > 1" @click.stop="nav(-1)">‹</button>
-      <span v-if="pairs.length > 1" class="counter">{{ current + 1 }}/{{ pairs.length }}</span>
-      <button v-if="pairs.length > 1" @click.stop="nav(1)">›</button>
+      <button v-if="groups.length > 1" @click.stop="navGroup(-1)">‹</button>
+      <span v-if="groups.length > 1" class="counter">{{ gIdx + 1 }}/{{ groups.length }}</span>
+      <button v-if="groups.length > 1" @click.stop="navGroup(1)">›</button>
+      <template v-if="group && group.hovers.length > 1">
+        <button @click.stop="navHover(-1)">▲</button>
+        <span class="counter">{{ hIdx + 1 }}/{{ group.hovers.length }}</span>
+        <button @click.stop="navHover(1)">▼</button>
+      </template>
       <button @click.stop="openFolder">文件夹</button>
       <button @click.stop="pick('base')">换底图</button>
       <button @click.stop="pick('hover')">换对比图</button>
