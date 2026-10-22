@@ -7,6 +7,9 @@ import { settings } from '../settings';
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
 const IMAGE_TYPES = [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }];
 const VIDEO_TYPES = [{ description: '视频', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.m4v'] } }];
+// 文件类型不一定有 MIME(有些系统只给空 type),再看扩展名
+const VIDEO_RE = /\.(?:mp4|webm|mov|m4v)$/i;
+const isVideo = (file, name) => file.type.startsWith('video/') || VIDEO_RE.test(name);
 
 function revokeGroup(g) {
   URL.revokeObjectURL(g.base);
@@ -89,13 +92,17 @@ export function useDirPairing() {
   const needRestore = ref(false);
   const noMatch = ref(false);
 
-  // ===== 单独换图:替换当前组的原图 / 当前选中那张产出 =====
+  // ===== 单独换图/换视频:替换当前组的底图 / 当前选中那张对比 =====
+  // 没有组时图/视频都能选,由选中的文件决定这对是什么;已有组则沿用组的类型
   async function pick(key) {
-    // 换图沿用当前组的媒体类型:视频对里换的必须是视频
-    const [handle] = await window.showOpenFilePicker({ types: group.value?.kind === 'video' ? VIDEO_TYPES : IMAGE_TYPES });
-    const url = URL.createObjectURL(await handle.getFile());
+    const k = group.value?.kind;
+    const [handle] = await window.showOpenFilePicker({ types: k === 'video' ? VIDEO_TYPES : k === 'image' ? IMAGE_TYPES : [...IMAGE_TYPES, ...VIDEO_TYPES] });
+    const file = await handle.getFile();
+    const url = URL.createObjectURL(file);
     if (!group.value) {
-      groups.value = [{ base: '', hovers: [''], baseName: '', hoverNames: [''] }];
+      groups.value = [isVideo(file, handle.name)
+        ? { kind: 'video', vids: ['', ''], base: '', hovers: [''], baseName: '', hoverNames: [''] }
+        : { base: '', hovers: [''], baseName: '', hoverNames: [''] }];
       gIdx.value = 0;
       hIdx.value = 0;
     }
@@ -118,41 +125,25 @@ export function useDirPairing() {
     }
   }
 
-  // ===== 拼接图:单张左右拼接图裁成两半,当作普通一对走全流程 =====
+  // ===== 拼接图/拼接视频:一张左右拼接的图,或一段左右拼接的视频 =====
+  // 图裁成两半;视频不拆不重编码,两槽共用同一个 objectURL,viewer 渲染时各裁半边
   async function pickStitched() {
-    const [handle] = await window.showOpenFilePicker({ types: IMAGE_TYPES });
-    const { left, right } = await cutHalves(await handle.getFile());
-    groups.value.forEach(revokeGroup);
+    const [handle] = await window.showOpenFilePicker({ types: [...IMAGE_TYPES, ...VIDEO_TYPES] });
+    const file = await handle.getFile();
     const stem = stemOf(handle.name);
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
-    groups.value = [{ base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] }];
-    gIdx.value = 0;
-    hIdx.value = 0;
-  }
-
-  // ===== 视频:选两个视频(第 1 个底图、第 2 个对比图)=====
-  async function pickVideos() {
-    const handles = await window.showOpenFilePicker({ multiple: true, types: VIDEO_TYPES });
-    if (handles.length < 2)
-      return;
-    const [a, b] = handles;
-    const urls = await Promise.all([a.getFile(), b.getFile()].map(f => f.then(URL.createObjectURL)));
+    let g;
+    if (isVideo(file, handle.name)) {
+      const url = URL.createObjectURL(file);
+      const e = handle.name.slice(handle.name.lastIndexOf('.'));
+      g = { kind: 'video', stitched: true, vids: [url], base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] };
+    }
+    else {
+      const { left, right } = await cutHalves(file);
+      g = { base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] };
+    }
     groups.value.forEach(revokeGroup);
-    groups.value = [{ kind: 'video', vids: urls, base: urls[0], hovers: [urls[1]], baseName: a.name, hoverNames: [b.name] }];
-    gIdx.value = 0;
-    hIdx.value = 0;
-  }
-
-  // ===== 拼接视频:一段左右拼接的视频,左右半各作底图/对比图 =====
-  // 不拆、不重编码:两槽共用同一个 objectURL,viewer 渲染时各裁半边
-  async function pickStitchedVideo() {
-    const [handle] = await window.showOpenFilePicker({ types: VIDEO_TYPES });
-    const url = URL.createObjectURL(await handle.getFile());
-    const stem = stemOf(handle.name);
-    const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
-    const e = handle.name.slice(handle.name.lastIndexOf('.'));
-    groups.value.forEach(revokeGroup);
-    groups.value = [{ kind: 'video', stitched: true, vids: [url], base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] }];
+    groups.value = [g];
     gIdx.value = 0;
     hIdx.value = 0;
   }
@@ -261,5 +252,5 @@ export function useDirPairing() {
     groups.value.forEach(revokeGroup);
   }
 
-  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, pickVideos, pickStitchedVideo, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
+  return { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose };
 }

@@ -1,7 +1,7 @@
 <script setup>
 // 查看器角落工具栏:翻组/翻产出按钮 + 计数,换图/文件夹/设置入口
 defineProps({ count: Number, gIdx: Number, hIdx: Number, hoverCount: { type: Number, default: 0 } });
-defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'pickVideos', 'pickStitchedVideo', 'openFolder', 'toggleSettings']);
+defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'openFolder', 'toggleSettings']);
 </script>
 
 <template>
@@ -33,14 +33,8 @@ defineEmits(['navGroup', 'navHover', 'pick', 'pickStitched', 'pickVideos', 'pick
     <button @click="$emit('pick', 'hover')">
       换对比图
     </button>
-    <button title="选一张左右拼接的单图,自动拆成两半对比" @click="$emit('pickStitched')">
-      拼接图
-    </button>
-    <button title="选两个视频:第 1 个当底图(出声),第 2 个当对比图(静音)" @click="$emit('pickVideos')">
-      视频
-    </button>
-    <button title="左右拼接的视频,左右半各作底图/对比图" @click="$emit('pickStitchedVideo')">
-      拼接视频
+    <button title="左右拼接的一张图(拆半)或一段视频(各露半边)" @click="$emit('pickStitched')">
+      拼接
     </button>
     <button @click="$emit('toggleSettings')">
       设置

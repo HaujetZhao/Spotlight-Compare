@@ -14,7 +14,7 @@ import { mediaSize } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
-const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, pickVideos, pickStitchedVideo, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
+const { groups, gIdx, hIdx, group, pair, needRestore, noMatch, pick, pickStitched, swapPair, openFolder, restore, grantRestore, navGroup, navHover, dispose } = useDirPairing();
 const showSettings = ref(false);
 const showHelp = ref(false);
 const viewer = ref(null);
@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="ugrv-ring" :style="ringStyle" />
-    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @pick-videos="pickVideos" @pick-stitched-video="pickStitchedVideo" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
+    <Toolbar :count="groups.length" :g-idx="gIdx" :h-idx="hIdx" :hover-count="group?.hovers.length ?? 0" @nav-group="navGroup" @nav-hover="navHover" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @toggle-settings="showSettings = !showSettings" />
     <button class="ugrv-help" title="快捷键" @click="showHelp = !showHelp">
       ?
     </button>
@@ -524,7 +524,7 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @pick-videos="pickVideos" @pick-stitched-video="pickStitchedVideo" @open-folder="openFolder" @grant-restore="grantRestore" />
+  <PickerPage v-else :pair="pair" :need-restore="needRestore" :no-match="noMatch" @pick="pick" @pick-stitched="pickStitched" @open-folder="openFolder" @grant-restore="grantRestore" />
 
   <SettingsPanel v-model="showSettings" />
 </template>
