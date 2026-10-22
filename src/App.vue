@@ -13,7 +13,7 @@ import { saveBlob } from './download';
 import { exportHtml } from './exportHtml';
 import { idbGet, idbSet } from './idb';
 import { canvasStops, maskCSS, MODES, pinCSS } from './mask';
-import { fitMapping, mediaSize, toMedia } from './media';
+import { circleHitsRect, fitMapping, mediaSize, toMedia } from './media';
 import { settings } from './settings';
 import SettingsPanel from './SettingsPanel.vue';
 
@@ -132,7 +132,11 @@ watch(pair, async (p, old) => {
 function pin() {
   if (!active.value)
     return;
-  pins.value.push({ x: x.value, y: y.value, mode: settings.mode, size: settings.size, softness: settings.softness });
+  const p = { x: x.value, y: y.value, mode: settings.mode, size: settings.size, softness: settings.softness };
+  // 圈整个落在底图绘制矩形外(黑边)时钉没有意义,不记
+  const { rect } = fitMapping(stage.value.querySelector('.front .ugrv-a'), stage.value.clientWidth, stage.value.clientHeight);
+  if (circleHitsRect(p.x, p.y, p.size, rect))
+    pins.value.push(p);
 }
 // 左键抬起时位移 < 5px 且按压时长 < 300ms 才算点击放钉,拖拽/长按不放
 let downPos = null;

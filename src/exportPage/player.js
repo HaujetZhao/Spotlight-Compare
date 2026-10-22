@@ -272,11 +272,19 @@
     }
 
     // ===== 钉:左键点击(位移<5px 且 <300ms,拖拽不放)放,右键去掉指针所在那枚 =====
+    // 圈整个落在底图绘制矩形外(黑边)时钉没有意义,不记(与 App 同规则)
+    function circleHitsRect(cx, cy, r, ra) {
+      const dx = cx - Math.max(ra[0], Math.min(cx, ra[0] + ra[2]));
+      const dy = cy - Math.max(ra[1], Math.min(cy, ra[1] + ra[3]));
+      return dx * dx + dy * dy <= r * r;
+    }
     function addPin() {
       if (!el.classList.contains('ugrv-in') || !mediaW(base))
         return;
       const ra = baseRect();
       const fitK = mediaW(base) / ra[2];
+      if (!circleHitsRect(x, y, size, ra))
+        return;
       pins[dir].push({ mx: (x - ra[0]) * fitK, my: (y - ra[1]) * fitK, mode, size: size * fitK });
       applyMask();
     }

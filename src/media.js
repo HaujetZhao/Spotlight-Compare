@@ -26,3 +26,10 @@ export function fitMapping(el, w, h) {
 export function toMedia(z, rect, k) {
   return { mx: (z.x - rect[0]) * k, my: (z.y - rect[1]) * k, size: z.size * k };
 }
+
+// 圆(局部空间)与绘制矩形是否有重叠:圈整个落在画面外(黑边)时放钉没有意义
+export function circleHitsRect(cx, cy, r, [x, y, w, h]) {
+  const dx = cx - Math.min(Math.max(cx, x), x + w);
+  const dy = cy - Math.min(Math.max(cy, y), y + h);
+  return dx * dx + dy * dy <= r * r;
+}
