@@ -141,7 +141,8 @@ function addPin(){
 }
 function unpin(){
   var ra=fitRect(ai),fitK=ai.naturalWidth/ra[2];
-  var i=pins[dir].findIndex(function(p){return Math.hypot(ra[0]+p.mx/fitK-x,ra[1]+p.my/fitK-y)<=p.size/fitK});
+  // 后钉的画在上面,从末尾往回找,先消掉最上面那枚
+  var i=pins[dir].findLastIndex(function(p){return Math.hypot(ra[0]+p.mx/fitK-x,ra[1]+p.my/fitK-y)<=p.size/fitK});
   if(i>=0){pins[dir].splice(i,1);applyMask()}
 }
 el.addEventListener('pointerenter',show);

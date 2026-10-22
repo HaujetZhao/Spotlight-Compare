@@ -150,7 +150,8 @@ function onViewUp(e) {
   downPos = null;
 }
 function unpin() {
-  const hit = pins.value.findIndex(p => Math.hypot(p.x - x.value, p.y - y.value) <= p.size);
+  // 后钉的画在上面,右键先消掉命中的最上面那个(从末尾往回找)
+  const hit = pins.value.findLastIndex(p => Math.hypot(p.x - x.value, p.y - y.value) <= p.size);
   if (hit >= 0)
     pins.value.splice(hit, 1);
 }
