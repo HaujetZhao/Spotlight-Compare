@@ -37,7 +37,9 @@ const stages = ref([null, null]);
 const cur = ref(0);
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-// 视频:每层一对 <video>,只有前层参与播放。声音跟 base(.ugrv-b 恒静音),Tab 互换后自然换声源
+// 视频:每层一对 <video>,只有前层参与播放。声音跟 base(.ugrv-b 恒静音),Tab 互换后自然换声源;
+// 设置里选了"对比视频出声"就反过来(出声的是 hover 角色那一层)
+const hoverAudio = computed(() => settings.audioSide === 'hover');
 function layerVideos(front) {
   return [...(viewer.value?.querySelectorAll(`.layer${front ? '.front' : ':not(.front)'} video`) ?? [])];
 }
@@ -49,30 +51,62 @@ function waitLoaded(v) {
     ? Promise.resolve()
     : new Promise(r => ['loadeddata', 'error'].forEach(t => v.addEventListener(t, r, { once: true })));
 }
-// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格。
 // 底图按角色(.ugrv-a,含拼接视频包裹层)找,不能依赖 DOM 顺序:Tab 互换后顺序不变、角色会换
-function playAll() {
+function baseOf(vs) {
+  return vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
+}
+// 把对比路的时间戳对齐到底图(暂停、起播都要一次;两路是各走各的时钟)
+function syncSlaves() {
   const vs = frontVideos();
-  const base = vs.find(v => v.closest('.ugrv-a')) ?? vs[0];
+  const base = baseOf(vs);
   if (!base)
     return;
-  // 起播前把对比路对齐到底图的时间戳(暂停后恢复、拼接视频两半不能各走各的)
   vs.forEach((v) => {
-    if (v !== base)
+    if (v !== base && Math.abs(v.currentTime - base.currentTime) > 0.001)
       v.currentTime = base.currentTime;
   });
+}
+// 播放中每帧对一次:两路起播早晚不同会留下固定偏差,超过一帧就拉回底图的位置
+let syncRaf = 0;
+function startSync() {
+  cancelAnimationFrame(syncRaf);
+  const step = () => {
+    const vs = frontVideos();
+    const base = baseOf(vs);
+    if (!base || base.paused)
+      return; // 停了就收手,下次 playAll 再开
+    vs.forEach((v) => {
+      if (v !== base && Math.abs(v.currentTime - base.currentTime) > 0.05)
+        v.currentTime = base.currentTime;
+    });
+    syncRaf = requestAnimationFrame(step);
+  };
+  syncRaf = requestAnimationFrame(step);
+}
+// 先起底图(带声,可能被自动播放策略拦),成功再起对比图——被拦就两路都不动,等空格
+function playAll() {
+  const vs = frontVideos();
+  const base = baseOf(vs);
+  if (!base)
+    return;
+  syncSlaves();
   // 两路同一拍起播:串着起会差出一截(第二路等第一路 play() resolve)
   const started = base.play();
   vs.filter(v => v !== base).forEach(v => v.play().catch(() => {}));
   started?.catch(() => vs.forEach(v => v.pause()));
+  startSync();
 }
 function togglePlay() {
   if (!pair.value?.base || !pair.value?.hover)
     return; // 还没选齐两路,不播
   const vs = frontVideos();
-  if (vs.some(v => !v.paused))
+  if (vs.some(v => !v.paused)) {
     vs.forEach(v => v.pause());
-  else playAll();
+    syncSlaves(); // 暂停后就停在同一个时间点,画面才对得上
+  }
+  else {
+    playAll();
+  }
 }
 // 任一播完:两路归零重播
 function onEnded(e) {
@@ -429,8 +463,8 @@ onBeforeUnmount(() => {
         </template>
         <!-- 两路 src 固定按载入顺序,角色(.ugrv-a 底图出声 / .ugrv-b 静音)随 swapped 切换:Tab 互换不重载 -->
         <template v-else-if="s?.kind === 'video'">
-          <video v-if="s.vids[0]" :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
-          <video v-if="s.vids[1]" :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="!s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[0]" :class="s.swapped ? 'ugrv-b' : 'ugrv-a'" :src="s.vids[0]" :muted="hoverAudio !== s.swapped" :style="s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
+          <video v-if="s.vids[1]" :class="s.swapped ? 'ugrv-a' : 'ugrv-b'" :src="s.vids[1]" :muted="hoverAudio === s.swapped" :style="!s.swapped && i === cur ? maskStyle : undefined" preload="auto" playsinline @loadedmetadata="onMeta" @ended="onEnded" />
         </template>
         <template v-else-if="s">
           <img class="ugrv-a" :src="s.base" alt="底图">

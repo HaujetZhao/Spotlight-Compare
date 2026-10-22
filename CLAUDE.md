@@ -53,11 +53,11 @@ public/icon.svg                # PWA/manifest 图标
 5. **导出压缩**:内嵌图按扩展名分流——`jpg/jpeg/webp` 源文件原样嵌入不重编码,其余格式画布重编码(面板格式/质量,JPEG 垫白底)。
 6. **objectURL 生命周期**:配对扫描/单换图时旧 URL 必须 revoke(`revokeGroup`/`pick` 内),卸载时兜底清全量。
 7. **持久化**:[idb.js](src/idb.js) 是手写最小 IndexedDB kv(无依赖)——`handles` store 存 dir handle(不可 JSON 序列化),`pairs` store 按 `pair.key` 存每对的状态记录(`{ pins: [...], ...以后每对的其他数值 }`);刷新后浏览器要求一次用户点击重新授权(`needRestore` 流程)。
-8. **配对规则**:`stemOf` 去扩展名 + 去任意位置的括号备注;带标记的进 base 槽(每根至多一张),不带的全部归该根的 hovers;标记改动防抖 300ms 自动重扫。
-9. **拼接图**:`pickStitched()`(单选,图片视频通用:视频走 `kind:'video'` + `stitched`,不拆)与文件夹扫描(带拼接图标记的单文件,标记在设置面板,默认 `拼-`)把左右拼接图经 `cutHalves()` 裁成两半(`floor(w/2)` 等宽保证 1:1 对应,PNG 无损编码)后当普通一对走全流程——viewer/合成/导出零特判;`Tab` 互换 base 与当前产出(名字一起换,原图在右边时用)。
+8. **配对规则**:`stemOf` 去扩展名 + 去任意位置的括号备注;带标记的进 base 槽(每根至多一张),不带的全部归该根的 hovers;标记改动防抖 300ms 自动重扫。扫描认 `MEDIA_EXTS`(图片 + 视频),组类型按底图扩展名定,同根下另一类的产出丢掉。
+9. **拼接图**:`pickStitched()`(单选,图片视频通用:视频走 `kind:'video'` + `stitched`,不拆;哪边是原图看设置 `stitchImageSide`/`stitchVideoSide`,视频侧靠 `flipped`)与文件夹扫描(带拼接图标记的单文件,标记在设置面板,默认 `拼-`)把左右拼接图经 `cutHalves()` 裁成两半(`floor(w/2)` 等宽保证 1:1 对应,PNG 无损编码)后当普通一对走全流程——viewer/合成/导出零特判;`Tab` 互换 base 与当前产出(名字一起换,原图在右边时用)。
 10. **光圈钉**:`pair.key`(目录/底图名|产出名,方向性)是按对绑定状态的稳定标识(objectURL 刷新即失效不能用);钉按 key 存 IDB `pairs` store,文件夹恢复后钉跟着恢复,Tab 互换算新的一对。
 11. **切图同步**:viewer 是双层 stage(`stages`/`cur`,前层不透明底色挡背层)——新一对 decode 完填背层、画完一帧后翻层,新图与新遮罩严格同帧;钉的加载也压到翻层前一刻。`pair` 是目标态,其他逻辑(钉、导出、合成)都读 `pair`;读 DOM(合成/onImg)要取 `.layer.front`。改 `cur` 之后必须 `await nextTick()` 才能查新前层的 DOM。
-12. **视频对**:`pair.kind === 'video'`。每层渲染一对 `<video>`,只有前层播放;声音跟 base(`.ugrv-b` 恒静音)。Tab 互换是**原地换角色**(`pair.vids` 固定载入顺序,`swapped` 决定谁挂 `.ugrv-a`/`.ugrv-b` 与静音),不重设 src、不翻层——视频元素换 src 会重载,卡一下。翻层后旧前层必须 `pause()`(被挡住也照样出声、吃解码)。两路选齐才自动播(只有底图时停在第一帧),起播前把对比路 `currentTime` 对齐到底图。空格 = 播放/暂停(图片对仍是切组),任一 `ended` → 两路归零重播。拼接视频不拆不重编码:两槽共用同一个 objectURL,`.ugrv-half`(整屏 wrapper,承载 mask)+ `.ugrv-crop`(按半边比例算出的裁切框)+ 2 倍宽视频,base 露左半、hover 露右半;Tab 互换翻 `group.flipped`(裁切位置与 `data-sx` 一起翻,合成也认 `data-sx`)。视频对 Ctrl+C/Ctrl+S 取当前帧合成,Ctrl+E 直接忽略。
+12. **视频对**:`pair.kind === 'video'`。每层渲染一对 `<video>`,只有前层播放;声音跟 base(`.ugrv-b` 恒静音)。Tab 互换是**原地换角色**(`pair.vids` 固定载入顺序,`swapped` 决定谁挂 `.ugrv-a`/`.ugrv-b` 与静音),不重设 src、不翻层——视频元素换 src 会重载,卡一下。翻层后旧前层必须 `pause()`(被挡住也照样出声、吃解码)。两路选齐才自动播(只有底图时停在第一帧),起播前把对比路 `currentTime` 对齐到底图。两路是各走各的时钟:暂停时 `syncSlaves()` 对齐,播放中 `startSync()` 每帧查一次,超过 50ms 就拉回底图。空格 = 播放/暂停(图片对仍是切组),任一 `ended` → 两路归零重播。出声默认跟 base,设置 `audioSide='hover'` 时反过来(仍是按角色,Tab 后声源跟着角色走)。拼接视频不拆不重编码:两槽共用同一个 objectURL,`.ugrv-half`(整屏 wrapper,承载 mask)+ `.ugrv-crop`(按半边比例算出的裁切框)+ 2 倍宽视频,base 露左半、hover 露右半;Tab 互换翻 `group.flipped`(裁切位置与 `data-sx` 一起翻,合成也认 `data-sx`)。视频对 Ctrl+C/Ctrl+S 取当前帧合成,Ctrl+E 直接忽略。
 
 ## 快捷键(App 与导出页一致)
 

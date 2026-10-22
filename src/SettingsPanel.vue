@@ -125,6 +125,42 @@ onBeforeUnmount(() => {
         <div class="separator" />
 
         <div class="item">
+          <label>拼接图原图</label>
+          <div class="seg-group">
+            <button class="seg-btn" :class="{ active: settings.stitchImageSide === 'left' }" @click="settings.stitchImageSide = 'left'">
+              左边
+            </button>
+            <button class="seg-btn" :class="{ active: settings.stitchImageSide === 'right' }" @click="settings.stitchImageSide = 'right'">
+              右边
+            </button>
+          </div>
+        </div>
+        <div class="item">
+          <label>拼接视频原视频</label>
+          <div class="seg-group">
+            <button class="seg-btn" :class="{ active: settings.stitchVideoSide === 'left' }" @click="settings.stitchVideoSide = 'left'">
+              左边
+            </button>
+            <button class="seg-btn" :class="{ active: settings.stitchVideoSide === 'right' }" @click="settings.stitchVideoSide = 'right'">
+              右边
+            </button>
+          </div>
+        </div>
+        <div class="item">
+          <label>默认出声</label>
+          <div class="seg-group">
+            <button class="seg-btn" :class="{ active: settings.audioSide === 'base' }" @click="settings.audioSide = 'base'">
+              原视频
+            </button>
+            <button class="seg-btn" :class="{ active: settings.audioSide === 'hover' }" @click="settings.audioSide = 'hover'">
+              对比视频
+            </button>
+          </div>
+        </div>
+
+        <div class="separator" />
+
+        <div class="item">
           <label>导出格式</label>
           <div class="seg-group">
             <button class="seg-btn" :class="{ active: settings.exportFormat === 'jpeg' }" @click="settings.exportFormat = 'jpeg'">

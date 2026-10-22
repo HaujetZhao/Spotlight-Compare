@@ -5,6 +5,7 @@ import { idbGet, idbSet } from '../idb';
 import { settings } from '../settings';
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
+const MEDIA_EXTS = new Set([...IMAGE_EXTS, 'mp4', 'webm', 'mov', 'm4v']);
 const IMAGE_TYPES = [{ description: '图片', accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'] } }];
 const VIDEO_TYPES = [{ description: '视频', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.m4v'] } }];
 // 图片和视频合成一个筛选项:分成两条会在对话框里出现两个类别
@@ -18,6 +19,8 @@ const MEDIA_TYPES = [{
 // 文件类型不一定有 MIME(有些系统只给空 type),再看扩展名
 const VIDEO_RE = /\.(?:mp4|webm|mov|m4v)$/i;
 const isVideo = (file, name) => file.type.startsWith('video/') || VIDEO_RE.test(name);
+const isVideoName = name => VIDEO_RE.test(name);
+const extOf = name => name.slice(name.lastIndexOf('.'));
 
 function revokeGroup(g) {
   URL.revokeObjectURL(g.base);
@@ -37,7 +40,7 @@ function pairUp(names) {
   const byRoot = new Map();
   for (const name of names) {
     const stem = stemOf(name);
-    if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
+    if (/\.\w+$/.test(name) && !MEDIA_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
       continue;
     const marked = settings.matchMode === 'prefix' ? stem.startsWith(m) : stem.endsWith(m);
     const root = marked
@@ -70,6 +73,26 @@ async function cutHalves(file) {
   return { left, right };
 }
 
+// 拼接素材成组:按设置决定哪一边是原图/原视频(载入后 Tab 仍可当场翻)
+function stitchedImageGroup(root, left, right) {
+  const r = settings.stitchImageSide === 'right';
+  const [b, h] = r ? [right, left] : [left, right];
+  return { base: b, hovers: [h], baseName: `${root}(${r ? '右' : '左'}).png`, hoverNames: [`${root}(${r ? '左' : '右'}).png`] };
+}
+function stitchedVideoGroup(root, ext, url) {
+  const r = settings.stitchVideoSide === 'right';
+  return {
+    kind: 'video',
+    stitched: true,
+    flipped: r,
+    vids: [url],
+    base: url,
+    hovers: [url],
+    baseName: `${root}(${r ? '右' : '左'})${ext}`,
+    hoverNames: [`${root}(${r ? '左' : '右'})${ext}`],
+  };
+}
+
 // --- 最小 IndexedDB kv 见 src/idb.js(handles 存目录句柄) ---
 
 export function useDirPairing() {
@@ -91,11 +114,11 @@ export function useDirPairing() {
       key: `${dirHandle.value?.name ?? ''}/${g.baseName}|${g.hoverNames[i] ?? g.hoverNames[0]}`,
       kind: g.kind ?? 'image',
       stitched: !!g.stitched,
-      // 视频对另带一份载入顺序的 srcs:Tab 互换只改角色(.ugrv-a/.ugrv-b 与静音),
-      // 不重设 src——视频元素换 src 会重载,卡一下。拼接视频两半同源,靠 flipped 决定谁露左半。
-      // 这里必须是快照:直接引用 g.vids 的话,换图后旧 pair 的 vids 也跟着变,
+      // 视频对另带一份载入顺序的 srcs(g.vids = [原底图, ...原对比图]):Tab 互换只改角色
+      // (.ugrv-a/.ugrv-b 与静音),不重设 src——视频元素换 src 会重载,卡一下。
+      // 必须是快照:直接引用 g.vids 的话换图后旧 pair 的 vids 也跟着变,
       // watch 里"同一组 src 不变 = Tab 互换"的判断就会误判
-      vids: g.vids && [...g.vids],
+      vids: g.vids && [g.vids[0], g.vids[1 + i] ?? g.vids[1]],
       swapped: !!g.vids && (g.stitched ? !!g.flipped : g.base !== g.vids[0]),
     };
   });
@@ -131,7 +154,7 @@ export function useDirPairing() {
       group.value.hovers[hIdx.value] = url;
       group.value.hoverNames[hIdx.value] = handle.name;
       if (group.value.vids)
-        group.value.vids[1] = url;
+        group.value.vids[1 + hIdx.value] = url;
     }
   }
 
@@ -144,13 +167,11 @@ export function useDirPairing() {
     const root = stem.startsWith(settings.stitchPrefix) ? stem.slice(settings.stitchPrefix.length) : stem;
     let g;
     if (isVideo(file, handle.name)) {
-      const url = URL.createObjectURL(file);
-      const e = handle.name.slice(handle.name.lastIndexOf('.'));
-      g = { kind: 'video', stitched: true, vids: [url], base: url, hovers: [url], baseName: `${root}(左)${e}`, hoverNames: [`${root}(右)${e}`] };
+      g = stitchedVideoGroup(root, extOf(handle.name), URL.createObjectURL(file));
     }
     else {
       const { left, right } = await cutHalves(file);
-      g = { base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] };
+      g = stitchedImageGroup(root, left, right);
     }
     groups.value.forEach(revokeGroup);
     groups.value = [g];
@@ -182,22 +203,37 @@ export function useDirPairing() {
     const stitchNames = [];
     const plainNames = [];
     for (const name of names) {
-      if (/\.\w+$/.test(name) && !IMAGE_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
+      if (/\.\w+$/.test(name) && !MEDIA_EXTS.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
         continue;
       (sp && stemOf(name).startsWith(sp) ? stitchNames : plainNames).push(name);
     }
     const list = [];
     for (const name of stitchNames) {
-      const { left, right } = await cutHalves(await dir.getFileHandle(name).then(h => h.getFile()));
+      const file = await dir.getFileHandle(name).then(h => h.getFile());
       const root = stemOf(name).slice(sp.length);
-      list.push({ base: left, hovers: [right], baseName: `${root}(左).png`, hoverNames: [`${root}(右).png`] });
+      if (isVideoName(name)) {
+        list.push(stitchedVideoGroup(root, extOf(name), URL.createObjectURL(file)));
+      }
+      else {
+        const { left, right } = await cutHalves(file);
+        list.push(stitchedImageGroup(root, left, right));
+      }
     }
     for (const { baseName, hoverNames } of pairUp(plainNames)) {
+      // 一个根下混着图与视频时只留与底图同类的产出
+      const video = isVideoName(baseName);
+      const names2 = hoverNames.filter(n => isVideoName(n) === video).sort();
+      if (!names2.length)
+        continue;
+      const base = URL.createObjectURL(await dir.getFileHandle(baseName).then(h => h.getFile()));
+      const hovers = await Promise.all(names2.map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL)));
       list.push({
-        base: URL.createObjectURL(await dir.getFileHandle(baseName).then(h => h.getFile())),
-        hovers: await Promise.all(hoverNames.sort().map(n => dir.getFileHandle(n).then(h => h.getFile()).then(URL.createObjectURL))),
+        kind: video ? 'video' : 'image',
+        base,
+        hovers,
         baseName,
-        hoverNames: [...hoverNames].sort(), // 与 hovers 一一对应,导出时取作文件名
+        hoverNames: names2, // 与 hovers 一一对应,导出时取作文件名
+        vids: video ? [base, ...hovers] : undefined,
       });
     }
     list.sort((a, b) => a.baseName.localeCompare(b.baseName));
@@ -237,7 +273,7 @@ export function useDirPairing() {
 
   // 标记设置变了自动重扫(输入防抖)
   let rescanTimer = null;
-  watch(() => [settings.matchMode, settings.matchStr, settings.stitchPrefix], () => {
+  watch(() => [settings.matchMode, settings.matchStr, settings.stitchPrefix, settings.stitchImageSide, settings.stitchVideoSide], () => {
     if (!dirHandle.value)
       return;
     clearTimeout(rescanTimer);
